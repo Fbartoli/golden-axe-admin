@@ -1,8 +1,9 @@
 import { sql } from '@/lib/db'
 import { NextResponse } from 'next/server'
 
-export async function GET(req: Request, { params }: { params: { email: string } }) {
-  const email = decodeURIComponent(params.email)
+export async function GET(req: Request, { params }: { params: Promise<{ email: string }> }) {
+  const { email: rawEmail } = await params
+  const email = decodeURIComponent(rawEmail)
 
   const [keys, plans, usage, collabs] = await Promise.all([
     sql`

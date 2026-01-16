@@ -1,7 +1,9 @@
-import { sql } from '@/lib/db'
+import { beSql } from '@/lib/db'
 import { NextResponse } from 'next/server'
 
 export const dynamic = 'force-dynamic'
+
+// Config table now lives in backend database (be.config)
 
 async function checkRpcHealth(url: string): Promise<{ latency: number; blockNumber: string | null; error: string | null }> {
   const start = Date.now()
@@ -45,8 +47,8 @@ async function checkRpcHealth(url: string): Promise<{ latency: number; blockNumb
 }
 
 export async function GET() {
-  // Get enabled networks
-  const networks = await sql`
+  // Get enabled networks from backend config
+  const networks = await beSql`
     SELECT chain, name, url
     FROM config
     WHERE enabled = true

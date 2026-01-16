@@ -5,7 +5,7 @@ export const dynamic = 'force-dynamic'
 
 interface Alert {
   id: string
-  type: 'sync_behind' | 'rpc_error' | 'high_memory' | 'high_disk' | 'reorg' | 'sync_stalled' | 'high_cpu' | 'custom'
+  type: 'sync_behind' | 'rpc_error' | 'sync_stalled' | 'db_connections' | 'db_cache' | 'db_long_query' | 'db_deadlock' | 'backend_down' | 'backend_slow' | 'custom'
   severity: 'info' | 'warning' | 'critical'
   chain?: number
   chainName?: string
@@ -111,7 +111,7 @@ async function loadAlertRules(): Promise<AlertRule[]> {
       FROM alert_rules
       WHERE enabled = true
     `
-    return rules as AlertRule[]
+    return rules as unknown as AlertRule[]
   } catch (e) {
     // Table might not exist yet
     return []
@@ -135,8 +135,8 @@ async function checkAlerts() {
     // Load custom rules
     const rules = await loadAlertRules()
 
-    // Get enabled chains
-    const configs = await sql`
+    // Get enabled chains (from backend database)
+    const configs = await beSql`
       SELECT chain, name, url
       FROM config
       WHERE enabled = true
@@ -250,73 +250,166 @@ async function checkAlerts() {
       }
     }
 
-    // Check system resources
-    const os = await import('os')
-    const totalMem = os.totalmem()
-    const freeMem = os.freemem()
-    const memUsagePercent = Math.round(((totalMem - freeMem) / totalMem) * 100)
+    // Check database health
+    for (const [dbName, dbConn] of [['Frontend DB', sql], ['Backend DB', beSql]] as const) {
+      try {
+        // Connection usage
+        const [connStats] = await dbConn`
+          SELECT
+            (SELECT count(*) FROM pg_stat_activity WHERE state = 'active') as active,
+            (SELECT count(*) FROM pg_stat_activity WHERE state = 'idle') as idle,
+            (SELECT setting::int FROM pg_settings WHERE name = 'max_connections') as max_conn
+        `
+        const totalConn = Number(connStats.active) + Number(connStats.idle)
+        const maxConn = Number(connStats.max_conn) || 100
+        const connUsagePercent = Math.round((totalConn / maxConn) * 100)
 
-    // CPU usage
-    const cpus = os.cpus()
-    let totalIdle = 0, totalTick = 0
-    for (const cpu of cpus) {
-      for (const type in cpu.times) {
-        totalTick += cpu.times[type as keyof typeof cpu.times]
+        metrics[`db_connections_${dbName}`] = { value: connUsagePercent }
+
+        if (connUsagePercent > 90) {
+          addAlert({
+            type: 'db_connections',
+            severity: 'critical',
+            message: `${dbName}: Connection pool nearly exhausted (${connUsagePercent}%)`,
+            details: `${totalConn}/${maxConn} connections in use`,
+          })
+        } else if (connUsagePercent > 75) {
+          addAlert({
+            type: 'db_connections',
+            severity: 'warning',
+            message: `${dbName}: High connection usage (${connUsagePercent}%)`,
+            details: `${totalConn}/${maxConn} connections in use`,
+          })
+        }
+
+        // Cache hit ratio
+        const [cacheStats] = await dbConn`
+          SELECT
+            CASE
+              WHEN blks_hit + blks_read = 0 THEN 100
+              ELSE round((blks_hit::numeric / (blks_hit + blks_read)) * 100, 2)
+            END as cache_hit_ratio
+          FROM pg_stat_database
+          WHERE datname = current_database()
+        `
+        const cacheHitRatio = Number(cacheStats?.cache_hit_ratio) || 100
+
+        metrics[`db_cache_${dbName}`] = { value: cacheHitRatio }
+
+        if (cacheHitRatio < 80) {
+          addAlert({
+            type: 'db_cache',
+            severity: 'warning',
+            message: `${dbName}: Low cache hit ratio (${cacheHitRatio}%)`,
+            details: `Consider increasing shared_buffers or reviewing query patterns`,
+          })
+        }
+
+        // Long-running queries (> 60 seconds)
+        const longQueries = await dbConn`
+          SELECT pid, now() - query_start as duration, left(query, 100) as query
+          FROM pg_stat_activity
+          WHERE (now() - query_start) > interval '60 seconds'
+            AND state != 'idle'
+            AND query NOT ILIKE '%pg_stat_activity%'
+          LIMIT 3
+        `
+
+        if (longQueries.length > 0) {
+          addAlert({
+            type: 'db_long_query',
+            severity: 'warning',
+            message: `${dbName}: ${longQueries.length} long-running query(s) detected`,
+            details: `PID ${longQueries[0].pid}: ${longQueries[0].query}...`,
+          })
+        }
+
+        // Deadlocks (check if count increased)
+        const [deadlockStats] = await dbConn`
+          SELECT deadlocks FROM pg_stat_database WHERE datname = current_database()
+        `
+        const deadlocks = Number(deadlockStats?.deadlocks) || 0
+
+        // We'd need to track previous deadlock count to detect new ones
+        // For now, just alert if there are any (they persist until stats reset)
+        metrics[`db_deadlocks_${dbName}`] = { value: deadlocks }
+
+      } catch (e: any) {
+        addAlert({
+          type: 'db_connections',
+          severity: 'critical',
+          message: `${dbName}: Connection failed`,
+          details: e.message,
+        })
       }
-      totalIdle += cpu.times.idle
-    }
-    const cpuUsage = Math.round((1 - totalIdle / totalTick) * 100)
-
-    // Store system metrics
-    metrics['memory_usage'] = { value: memUsagePercent }
-    metrics['cpu_usage'] = { value: cpuUsage }
-
-    // Default memory alerts
-    if (memUsagePercent > 90) {
-      addAlert({
-        type: 'high_memory',
-        severity: 'critical',
-        message: `Memory usage is critically high: ${memUsagePercent}%`,
-        details: `Free: ${Math.round(freeMem / 1024 / 1024 / 1024)}GB of ${Math.round(totalMem / 1024 / 1024 / 1024)}GB`,
-      })
-    } else if (memUsagePercent > 80) {
-      addAlert({
-        type: 'high_memory',
-        severity: 'warning',
-        message: `Memory usage is high: ${memUsagePercent}%`,
-      })
     }
 
-    // Default CPU alerts
-    if (cpuUsage > 90) {
-      addAlert({
-        type: 'high_cpu',
-        severity: 'critical',
-        message: `CPU usage is critically high: ${cpuUsage}%`,
-      })
-    } else if (cpuUsage > 80) {
-      addAlert({
-        type: 'high_cpu',
-        severity: 'warning',
-        message: `CPU usage is high: ${cpuUsage}%`,
-      })
+    // Check backend service health
+    const beUrl = process.env.BE_URL
+    if (beUrl) {
+      try {
+        const start = performance.now()
+        const healthUrl = beUrl.replace(/\/$/, '') + '/health'
+
+        let response: Response
+        try {
+          response = await fetch(healthUrl, {
+            method: 'GET',
+            signal: AbortSignal.timeout(5000),
+          })
+        } catch {
+          response = await fetch(beUrl, {
+            method: 'GET',
+            signal: AbortSignal.timeout(5000),
+          })
+        }
+
+        const latency = Math.round(performance.now() - start)
+        metrics['backend_latency'] = { value: latency }
+
+        if (!response.ok && response.status >= 500) {
+          addAlert({
+            type: 'backend_down',
+            severity: 'critical',
+            message: `Backend service returned HTTP ${response.status}`,
+            details: `URL: ${beUrl.replace(/\/\/[^:]+:[^@]+@/, '//***:***@')}`,
+          })
+        } else if (latency > 2000) {
+          addAlert({
+            type: 'backend_slow',
+            severity: 'warning',
+            message: `Backend service responding slowly (${latency}ms)`,
+          })
+        }
+      } catch (e: any) {
+        addAlert({
+          type: 'backend_down',
+          severity: 'critical',
+          message: `Backend service unreachable: ${e.name === 'TimeoutError' ? 'Timeout' : e.message}`,
+        })
+      }
     }
 
     // Check custom rules
     for (const rule of rules) {
-      let metricKey: string
       let metricData: { value: number; chain?: number; chainName?: string } | undefined
 
       if (rule.type === 'sync_behind' && rule.chain) {
-        metricKey = `sync_behind_${rule.chain}`
-        metricData = metrics[metricKey]
+        metricData = metrics[`sync_behind_${rule.chain}`]
       } else if (rule.type === 'rpc_latency' && rule.chain) {
-        metricKey = `rpc_latency_${rule.chain}`
-        metricData = metrics[metricKey]
-      } else if (rule.type === 'memory_usage') {
-        metricData = metrics['memory_usage']
-      } else if (rule.type === 'cpu_usage') {
-        metricData = metrics['cpu_usage']
+        metricData = metrics[`rpc_latency_${rule.chain}`]
+      } else if (rule.type === 'db_connections') {
+        // Use highest connection usage across DBs
+        const feConn = metrics['db_connections_Frontend DB']?.value || 0
+        const beConn = metrics['db_connections_Backend DB']?.value || 0
+        metricData = { value: Math.max(feConn, beConn) }
+      } else if (rule.type === 'db_cache') {
+        // Use lowest cache hit ratio across DBs
+        const feCache = metrics['db_cache_Frontend DB']?.value || 100
+        const beCache = metrics['db_cache_Backend DB']?.value || 100
+        metricData = { value: Math.min(feCache, beCache) }
+      } else if (rule.type === 'backend_latency') {
+        metricData = metrics['backend_latency']
       }
 
       if (metricData && checkRule(rule, metricData.value)) {

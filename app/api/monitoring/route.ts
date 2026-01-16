@@ -74,10 +74,10 @@ export async function GET() {
     // Tables might not exist or have different schema
   }
 
-  // Get network configs for RPC health check
+  // Get network configs for RPC health check (from backend database)
   let networks: any[] = []
   try {
-    networks = await sql`
+    networks = await beSql`
       SELECT chain, name, url, enabled
       FROM config
       WHERE enabled = true

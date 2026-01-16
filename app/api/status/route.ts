@@ -1,9 +1,9 @@
-import { sql, beSql } from '@/lib/db'
+import { beSql } from '@/lib/db'
 import { NextResponse } from 'next/server'
 
 export async function GET() {
-  // Get config from fe database
-  const config = await sql`
+  // Get config from be database (config table moved to backend)
+  const config = await beSql`
     SELECT chain, name, url, enabled, batch_size, concurrency, start_block
     FROM config
     WHERE enabled = true

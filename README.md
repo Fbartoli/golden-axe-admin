@@ -8,6 +8,12 @@ This Next.js application provides a web-based administration interface for manag
 
 ## Features
 
+### Authentication
+- Password-based login with secure cookie sessions
+- HMAC-SHA256 signed session tokens
+- 7-day session expiry
+- All routes protected except `/login`
+
 ### Network Management
 - Add, edit, and remove blockchain networks
 - Configure RPC endpoints, batch sizes, and concurrency settings
@@ -53,27 +59,40 @@ This Next.js application provides a web-based administration interface for manag
 - Track connection errors
 - URLs are masked to protect API keys
 
-### System Health
-- CPU usage and load averages
-- Memory utilization
-- Disk space monitoring
-- System uptime tracking
+### Infrastructure Health
+Monitors both PostgreSQL databases and backend service:
+
+**Database Metrics (Frontend & Backend DBs):**
+- Connection pool usage (active/idle/max)
+- Cache hit ratio
+- Long-running queries (> 30 seconds)
+- Deadlock count
+- Database size
+- Replication lag (if applicable)
+
+**Backend Service:**
+- Health check status (healthy/unhealthy/unknown)
+- Response latency
+- Connection errors
 
 ### Alerting System
 Built-in alerts for:
 - **Sync Behind**: Chain is falling behind RPC head
 - **Sync Stalled**: No new blocks indexed recently
 - **RPC Errors**: Connection or response failures
-- **High Memory**: Memory usage exceeds thresholds
-- **High CPU**: CPU usage exceeds thresholds
-- **High Disk**: Disk space running low
+- **DB Connections**: Connection pool usage > 75%/90%
+- **DB Cache**: Cache hit ratio < 80%
+- **DB Long Query**: Queries running > 60 seconds
+- **Backend Down**: Backend service unreachable or HTTP 5xx
+- **Backend Slow**: Backend latency > 2000ms
 
 Alert severities: `info`, `warning`, `critical`
 
 ### Custom Alert Rules
 - Create custom threshold-based rules
 - Configurable comparison operators (>, >=, <, <=, =)
-- Per-chain or system-wide rules
+- Per-chain rules for sync_behind, rpc_latency
+- Infrastructure rules for db_connections, db_cache, backend_latency
 - Track when rules were last triggered
 
 ### Notifications
@@ -104,10 +123,10 @@ Alert severities: `info`, `warning`, `critical`
 
 ### Environment Variables
 ```env
-DATABASE_URL=postgres://...         # Frontend database (users, plans, keys)
-BE_DATABASE_URL=postgres://...      # Backend database (indexed blockchain data)
-BE_URL=http://golden-axe-be:8000    # Backend API URL
-NEXT_PUBLIC_URL=http://localhost:3000
+PG_URL_FE=postgres://...            # Frontend database (users, plans, keys)
+PG_URL_BE=postgres://...            # Backend database (indexed blockchain data)
+BE_URL=http://golden-axe-be:8000    # Backend API URL (for proxied requests)
+ADMIN_PASSWORD=your-secure-password # Password for admin panel login
 ```
 
 ### Installation
@@ -132,6 +151,8 @@ Runs on http://localhost:3000
 
 | Endpoint | Description |
 |----------|-------------|
+| `POST /api/auth/login` | Authenticate and create session |
+| `POST /api/auth/logout` | Destroy session |
 | `GET /api/networks` | List all configured networks |
 | `POST /api/networks` | Add/update network configuration |
 | `DELETE /api/networks` | Remove a network |
@@ -140,17 +161,24 @@ Runs on http://localhost:3000
 | `GET /api/keys` | List all API keys |
 | `POST /api/keys` | Create new API key |
 | `DELETE /api/keys` | Revoke API key |
+| `GET /api/admin-key` | List admin API keys |
+| `POST /api/admin-key` | Create admin API key |
+| `DELETE /api/admin-key` | Revoke admin API key |
 | `GET /api/status` | Get sync status for all chains |
-| `GET /api/sync-history` | Get historical sync data |
+| `GET /api/sync-history` | Get historical sync data with rates |
+| `GET /api/sync-stream` | SSE stream of sync events |
 | `POST /api/query` | Execute query against backend |
+| `GET /api/query-live` | SSE stream for live queries |
+| `GET /api/schema` | Get database schema and query templates |
 | `POST /api/decode` | Decode event log with ABI |
 | `GET /api/rpc-health` | Check RPC endpoint health |
-| `GET /api/system-health` | Get system resource metrics |
+| `GET /api/system-health` | Get DB and backend health metrics |
 | `GET /api/monitoring` | Get database and usage stats |
 | `GET /api/alerts` | Get current alerts |
 | `POST /api/alerts` | Acknowledge/clear alerts |
 | `GET /api/notifications` | Get notification config |
 | `POST /api/notifications` | Manage webhooks/emails/rules |
+| `POST /api/notifications/send` | Send alert notifications |
 
 ## License
 

@@ -1,6 +1,7 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useRouter } from 'next/navigation'
 
 interface Network {
   chain: number
@@ -117,41 +118,45 @@ interface MonitoringData {
   userUsage: UserUsage[]
 }
 
+interface PostgresHealth {
+  database: string
+  connections: {
+    active: number
+    idle: number
+    max: number
+    usagePercent: number
+  }
+  cacheHitRatio: number
+  deadlocks: number
+  size: string
+  sizeBytes: number
+  longRunningQueries: Array<{
+    pid: number
+    duration: string
+    query: string
+    state: string
+  }>
+  replicationLag?: string
+}
+
+interface BackendHealth {
+  url: string
+  status: 'healthy' | 'unhealthy' | 'unknown'
+  latencyMs: number | null
+  error?: string
+  lastCheck: string
+}
+
 interface SystemHealth {
-  cpu: {
-    usage: number
-    cores: number
-    model: string
-    loadAvg: number[]
-  }
-  memory: {
-    total: number
-    used: number
-    free: number
-    usagePercent: number
-    totalFormatted: string
-    usedFormatted: string
-    freeFormatted: string
-  }
-  disk: {
-    total: number
-    used: number
-    free: number
-    usagePercent: number
-    mount: string
-    totalFormatted: string
-    usedFormatted: string
-    freeFormatted: string
-  }
-  uptime: number
-  uptimeFormatted: string
-  platform: string
-  hostname: string
+  frontend_db: PostgresHealth | null
+  backend_db: PostgresHealth | null
+  backend_service: BackendHealth
+  timestamp: string
 }
 
 interface Alert {
   id: string
-  type: 'sync_behind' | 'rpc_error' | 'high_memory' | 'high_disk' | 'reorg' | 'sync_stalled'
+  type: 'sync_behind' | 'rpc_error' | 'sync_stalled' | 'db_connections' | 'db_cache' | 'db_long_query' | 'db_deadlock' | 'backend_down' | 'backend_slow' | 'custom'
   severity: 'info' | 'warning' | 'critical'
   chain?: number
   chainName?: string
@@ -171,6 +176,7 @@ interface SyncHistoryData {
   }>
   syncRates: Record<number, { blocksPerHour: number; logsPerHour: number }>
   rpcBlocks: Record<number, number>
+  startBlocks: Record<number, number>
   syncStatus: Record<number, { behind: number; percentSynced: number; estimatedTimeToSync: string }>
   chartData: Record<number, { blocks: number[]; timestamps: string[] }>
 }
@@ -218,13 +224,14 @@ interface NotificationSettings {
 }
 
 export default function AdminPage() {
+  const router = useRouter()
   const [networks, setNetworks] = useState<Network[]>([])
   const [keys, setKeys] = useState<ApiKey[]>([])
   const [adminKeys, setAdminKeys] = useState<AdminKey[]>([])
   const [users, setUsers] = useState<User[]>([])
   const [selectedUser, setSelectedUser] = useState<UserDetail | null>(null)
   const [syncStatus, setSyncStatus] = useState<SyncStatus | null>(null)
-  const [tab, setTab] = useState<'networks' | 'keys' | 'users' | 'status' | 'query' | 'live' | 'decoder' | 'monitoring' | 'notifications'>('networks')
+  const [tab, setTab] = useState<'networks' | 'users' | 'sync' | 'query' | 'system' | 'notifications'>('networks')
 
   // Monitoring state
   const [monitoringData, setMonitoringData] = useState<MonitoringData | null>(null)
@@ -244,8 +251,16 @@ export default function AdminPage() {
   const [emailForm, setEmailForm] = useState({ name: '', email: '', events: [] as string[] })
   const [ruleForm, setRuleForm] = useState({ name: '', type: 'sync_behind', chain: '', threshold: '', comparison: 'gt', severity: 'warning' })
 
-  // UI state
-  const [darkMode, setDarkMode] = useState(false)
+  // UI state - lazy init from localStorage
+  const [darkMode, setDarkMode] = useState(() => {
+    if (typeof window === 'undefined') return false
+    try {
+      const saved = localStorage.getItem('darkMode')
+      return saved ? JSON.parse(saved) : false
+    } catch {
+      return false
+    }
+  })
   const [searchQuery, setSearchQuery] = useState('')
   const [showCommandPalette, setShowCommandPalette] = useState(false)
 
@@ -320,26 +335,20 @@ LIMIT 10`)
 
   // Auto-refresh for sync status
   useEffect(() => {
-    if (tab === 'status' && autoRefresh) {
+    if (tab === 'sync' && autoRefresh) {
       const interval = setInterval(fetchStatus, 5000)
       return () => clearInterval(interval)
     }
   }, [tab, autoRefresh])
 
-  // Stop monitoring interval when leaving monitoring tab
+  // Stop monitoring interval when leaving system tab
   useEffect(() => {
-    if (tab !== 'monitoring') {
+    if (tab !== 'system') {
       stopMonitoringInterval()
     }
     // Cleanup on unmount
     return () => stopMonitoringInterval()
   }, [tab])
-
-  // Load dark mode preference
-  useEffect(() => {
-    const saved = localStorage.getItem('darkMode')
-    if (saved) setDarkMode(JSON.parse(saved))
-  }, [])
 
   // Save dark mode preference
   useEffect(() => {
@@ -369,30 +378,28 @@ LIMIT 10`)
         setSearchQuery('')
       }
 
-      // Number keys 1-8 for tabs (without modifiers)
+      // Number keys 1-6 for tabs (without modifiers)
       if (!e.ctrlKey && !e.metaKey && !e.altKey) {
-        const tabs: Array<typeof tab> = ['networks', 'keys', 'users', 'status', 'query', 'live', 'decoder', 'monitoring']
+        const tabs: Array<typeof tab> = ['networks', 'users', 'sync', 'query', 'system', 'notifications']
         const num = parseInt(e.key)
-        if (num >= 1 && num <= 8) {
+        if (num >= 1 && num <= 6) {
           setTab(tabs[num - 1])
-          if (num === 4) fetchStatus()
-          if (num === 6) startSyncStream()
-          if (num === 8) { fetchMonitoring(); checkRpcHealth() }
+          if (num === 3) fetchStatus()
+          if (num === 5) { fetchMonitoring(); checkRpcHealth() }
         }
       }
 
       // D: Toggle dark mode
       if (e.key === 'd' && !e.ctrlKey && !e.metaKey) {
-        setDarkMode(d => !d)
+        setDarkMode((d: boolean) => !d)
       }
 
       // R: Refresh current tab
       if (e.key === 'r' && !e.ctrlKey && !e.metaKey) {
         if (tab === 'networks') fetchNetworks()
-        if (tab === 'keys') fetchKeys()
-        if (tab === 'users') fetchUsers()
-        if (tab === 'status') fetchStatus()
-        if (tab === 'monitoring') { fetchMonitoring(); checkRpcHealth() }
+        if (tab === 'users') { fetchUsers(); fetchKeys(); fetchAdminKeys() }
+        if (tab === 'sync') fetchStatus()
+        if (tab === 'system') { fetchMonitoring(); checkRpcHealth() }
       }
     }
 
@@ -695,40 +702,43 @@ LIMIT 10`)
     setSelectedUser(await res.json())
   }
 
+  // Uses functional setState for stable reference in intervals (avoids stale closures)
   async function fetchStatus() {
     const res = await fetch('/api/status')
     const data = await res.json()
     setSyncStatus(data)
 
-    // Calculate speed for each chain
+    // Calculate speed for each chain using functional updates to avoid stale closures
     const now = Date.now()
-    const newSpeeds: Record<number, number> = {}
 
-    for (const [chainStr, status] of Object.entries(data.chainStatus)) {
-      const chain = Number(chainStr)
-      const currentCount = (status as any).total_blocks || 0
-      const prev = prevBlockCounts[chain]
+    setPrevBlockCounts(prev => {
+      const newSpeeds: Record<number, number> = {}
 
-      if (prev && now - prev.time > 0) {
-        const blocksDiff = currentCount - prev.count
-        const timeDiff = (now - prev.time) / 1000 // seconds
-        if (blocksDiff > 0 && timeDiff > 0) {
-          newSpeeds[chain] = Number((blocksDiff / timeDiff).toFixed(2))
-        } else {
-          newSpeeds[chain] = syncSpeed[chain] || 0
+      for (const [chainStr, status] of Object.entries(data.chainStatus)) {
+        const chain = Number(chainStr)
+        const currentCount = (status as any).total_blocks || 0
+        const prevCount = prev[chain]
+
+        if (prevCount && now - prevCount.time > 0) {
+          const blocksDiff = currentCount - prevCount.count
+          const timeDiff = (now - prevCount.time) / 1000 // seconds
+          if (blocksDiff > 0 && timeDiff > 0) {
+            newSpeeds[chain] = Number((blocksDiff / timeDiff).toFixed(2))
+          }
         }
       }
-    }
 
-    setSyncSpeed(newSpeeds)
+      // Update speeds using functional update
+      setSyncSpeed(prevSpeeds => ({ ...prevSpeeds, ...newSpeeds }))
 
-    // Update previous counts
-    const newPrevCounts: Record<number, { count: number; time: number }> = {}
-    for (const [chainStr, status] of Object.entries(data.chainStatus)) {
-      const chain = Number(chainStr)
-      newPrevCounts[chain] = { count: (status as any).total_blocks || 0, time: now }
-    }
-    setPrevBlockCounts(newPrevCounts)
+      // Return new previous counts
+      const newPrevCounts: Record<number, { count: number; time: number }> = {}
+      for (const [chainStr, status] of Object.entries(data.chainStatus)) {
+        const chain = Number(chainStr)
+        newPrevCounts[chain] = { count: (status as any).total_blocks || 0, time: now }
+      }
+      return newPrevCounts
+    })
   }
 
   function startSyncStream() {
@@ -967,8 +977,14 @@ LIMIT 10`)
     fetchAdminKeys()
   }
 
-  // Dark mode colors
-  const colors = {
+  async function handleLogout() {
+    await fetch('/api/auth/logout', { method: 'POST' })
+    router.push('/login')
+    router.refresh()
+  }
+
+  // Dark mode colors - memoized to prevent object recreation on every render
+  const colors = useMemo(() => ({
     bg: darkMode ? '#1a1a2e' : '#f5f5f5',
     cardBg: darkMode ? '#16213e' : '#fff',
     text: darkMode ? '#e4e4e7' : '#333',
@@ -982,9 +998,10 @@ LIMIT 10`)
     danger: '#dc3545',
     warning: '#ffc107',
     secondary: '#6c757d',
-  }
+  }), [darkMode])
 
-  const styles = {
+  // Styles - memoized to prevent object recreation on every render
+  const styles = useMemo(() => ({
     page: { minHeight: '100vh', background: colors.bg, color: colors.text, padding: '20px', transition: 'all 0.3s ease' },
     container: { maxWidth: '1200px', margin: '0 auto' },
     header: { marginBottom: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap' as const, gap: '10px' },
@@ -1047,26 +1064,37 @@ LIMIT 10`)
       border: `1px solid ${colors.border}`,
     },
     shortcutKey: { display: 'inline-block', padding: '2px 6px', background: colors.statBg, borderRadius: '3px', fontSize: '11px', marginLeft: '8px', fontFamily: 'monospace' },
-  }
+  }), [colors, darkMode])
 
-  // Filter data based on search query
-  const filteredNetworks = networks.filter(n =>
-    searchQuery === '' ||
-    n.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    n.chain.toString().includes(searchQuery) ||
-    n.url.toLowerCase().includes(searchQuery.toLowerCase())
+  // Filter data based on search query - memoized to prevent recalculation on every render
+  const searchLower = useMemo(() => searchQuery.toLowerCase(), [searchQuery])
+
+  const filteredNetworks = useMemo(() =>
+    networks.filter(n =>
+      searchQuery === '' ||
+      n.name.toLowerCase().includes(searchLower) ||
+      n.chain.toString().includes(searchQuery) ||
+      n.url.toLowerCase().includes(searchLower)
+    ),
+    [networks, searchQuery, searchLower]
   )
 
-  const filteredKeys = keys.filter(k =>
-    searchQuery === '' ||
-    k.owner_email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    k.secret.toLowerCase().includes(searchQuery.toLowerCase())
+  const filteredKeys = useMemo(() =>
+    keys.filter(k =>
+      searchQuery === '' ||
+      k.owner_email.toLowerCase().includes(searchLower) ||
+      k.secret.toLowerCase().includes(searchLower)
+    ),
+    [keys, searchQuery, searchLower]
   )
 
-  const filteredUsers = users.filter(u =>
-    searchQuery === '' ||
-    u.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    (u.plan_name && u.plan_name.toLowerCase().includes(searchQuery.toLowerCase()))
+  const filteredUsers = useMemo(() =>
+    users.filter(u =>
+      searchQuery === '' ||
+      u.email.toLowerCase().includes(searchLower) ||
+      (u.plan_name && u.plan_name.toLowerCase().includes(searchLower))
+    ),
+    [users, searchQuery, searchLower]
   )
 
   return (
@@ -1154,22 +1182,25 @@ LIMIT 10`)
                 Clear filter
               </button>
             )}
-            <button style={styles.darkModeBtn} onClick={() => setDarkMode(d => !d)}>
+            <button style={styles.darkModeBtn} onClick={() => setDarkMode((d: boolean) => !d)}>
               {darkMode ? '☀️ Light' : '🌙 Dark'}
+            </button>
+            <button
+              style={{ ...styles.button, background: colors.danger, padding: '6px 12px', fontSize: '12px' }}
+              onClick={handleLogout}
+            >
+              Logout
             </button>
           </div>
         </div>
 
         <div style={styles.tabs}>
         <button style={styles.tab(tab === 'networks')} onClick={() => setTab('networks')}>Networks</button>
-        <button style={styles.tab(tab === 'keys')} onClick={() => setTab('keys')}>API Keys</button>
-        <button style={styles.tab(tab === 'users')} onClick={() => setTab('users')}>Users</button>
-        <button style={styles.tab(tab === 'status')} onClick={() => { setTab('status'); fetchStatus(); }}>Sync Status</button>
+        <button style={styles.tab(tab === 'users')} onClick={() => { setTab('users'); fetchUsers(); fetchKeys(); fetchAdminKeys(); }}>Users</button>
+        <button style={styles.tab(tab === 'sync')} onClick={() => { setTab('sync'); fetchStatus(); }}>Sync</button>
         <button style={styles.tab(tab === 'query')} onClick={() => { setTab('query'); fetchSchema(); }}>Query</button>
-        <button style={styles.tab(tab === 'live')} onClick={() => { setTab('live'); startSyncStream(); }}>Live Sync</button>
-        <button style={styles.tab(tab === 'decoder')} onClick={() => setTab('decoder')}>Event Decoder</button>
-        <button style={styles.tab(tab === 'monitoring')} onClick={() => { setTab('monitoring'); fetchMonitoring(); checkRpcHealth(); startMonitoringInterval(); }}>
-          Monitoring
+        <button style={styles.tab(tab === 'system')} onClick={() => { setTab('system'); fetchMonitoring(); checkRpcHealth(); startMonitoringInterval(); }}>
+          System
           {unacknowledgedAlerts > 0 && (
             <span style={{ marginLeft: '5px', background: '#dc3545', color: '#fff', borderRadius: '10px', padding: '2px 6px', fontSize: '11px' }}>{unacknowledgedAlerts}</span>
           )}
@@ -1269,7 +1300,7 @@ LIMIT 10`)
         </>
       )}
 
-      {tab === 'keys' && (
+      {tab === 'users' && !selectedUser && (
         <>
           <div style={styles.card}>
             <h3>Add API Key</h3>
@@ -1541,7 +1572,7 @@ LIMIT 10`)
         </>
       )}
 
-      {tab === 'status' && (
+      {tab === 'sync' && (
         <>
           <div style={styles.card}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
@@ -2005,7 +2036,7 @@ Approval(address indexed owner, address indexed spender, uint256 value)"
         </>
       )}
 
-      {tab === 'live' && (
+      {tab === 'sync' && (
         <>
           <div style={styles.card}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
@@ -2072,7 +2103,7 @@ Approval(address indexed owner, address indexed spender, uint256 value)"
         </>
       )}
 
-      {tab === 'decoder' && (
+      {tab === 'query' && (
         <>
           <div style={styles.card}>
             <h3>Event Decoder</h3>
@@ -2191,7 +2222,7 @@ Approval(address indexed owner, address indexed spender, uint256 value)"
         </>
       )}
 
-      {tab === 'monitoring' && (
+      {tab === 'system' && (
         <>
           {/* Database Size */}
           <div style={styles.card}>
@@ -2467,70 +2498,147 @@ Approval(address indexed owner, address indexed spender, uint256 value)"
             )}
           </div>
 
-          {/* System Health */}
+          {/* System Health - Database & Backend */}
           <div style={styles.card}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
-              <h3 style={{ margin: 0 }}>System Health</h3>
+              <h3 style={{ margin: 0 }}>Infrastructure Health</h3>
               <button style={styles.button} onClick={fetchSystemHealth}>Refresh</button>
             </div>
 
             {systemHealth ? (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px' }}>
-                {/* CPU */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                {/* Backend Service */}
                 <div style={{ padding: '15px', background: colors.statBg, borderRadius: '8px' }}>
-                  <div style={{ fontSize: '12px', color: colors.textMuted, marginBottom: '8px' }}>CPU Usage</div>
-                  <div style={{ fontSize: '28px', fontWeight: 'bold', color: systemHealth.cpu.usage > 80 ? '#dc3545' : systemHealth.cpu.usage > 60 ? '#ffc107' : '#28a745' }}>
-                    {systemHealth.cpu.usage}%
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                    <div style={{ fontSize: '14px', fontWeight: 'bold' }}>Backend Service</div>
+                    <div style={{
+                      padding: '4px 12px',
+                      borderRadius: '12px',
+                      fontSize: '12px',
+                      fontWeight: 'bold',
+                      background: systemHealth.backend_service.status === 'healthy' ? '#28a745' : systemHealth.backend_service.status === 'unhealthy' ? '#dc3545' : '#6c757d',
+                      color: '#fff'
+                    }}>
+                      {systemHealth.backend_service.status.toUpperCase()}
+                    </div>
                   </div>
-                  <div style={{ height: '6px', background: '#e9ecef', borderRadius: '3px', marginTop: '8px' }}>
-                    <div style={{ width: `${systemHealth.cpu.usage}%`, height: '100%', background: systemHealth.cpu.usage > 80 ? '#dc3545' : systemHealth.cpu.usage > 60 ? '#ffc107' : '#28a745', borderRadius: '3px' }} />
-                  </div>
-                  <div style={{ fontSize: '11px', color: colors.textMuted, marginTop: '8px' }}>
-                    {systemHealth.cpu.cores} cores | Load: {systemHealth.cpu.loadAvg.map(l => l.toFixed(2)).join(', ')}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '15px' }}>
+                    <div>
+                      <div style={{ fontSize: '11px', color: colors.textMuted }}>Latency</div>
+                      <div style={{ fontSize: '20px', fontWeight: 'bold', color: systemHealth.backend_service.latencyMs && systemHealth.backend_service.latencyMs > 1000 ? '#ffc107' : colors.text }}>
+                        {systemHealth.backend_service.latencyMs !== null ? `${systemHealth.backend_service.latencyMs}ms` : 'N/A'}
+                      </div>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: '11px', color: colors.textMuted }}>URL</div>
+                      <div style={{ fontSize: '12px', color: colors.text, wordBreak: 'break-all' }}>{systemHealth.backend_service.url}</div>
+                    </div>
+                    {systemHealth.backend_service.error && (
+                      <div>
+                        <div style={{ fontSize: '11px', color: colors.textMuted }}>Error</div>
+                        <div style={{ fontSize: '12px', color: '#dc3545' }}>{systemHealth.backend_service.error}</div>
+                      </div>
+                    )}
                   </div>
                 </div>
 
-                {/* Memory */}
-                <div style={{ padding: '15px', background: colors.statBg, borderRadius: '8px' }}>
-                  <div style={{ fontSize: '12px', color: colors.textMuted, marginBottom: '8px' }}>Memory Usage</div>
-                  <div style={{ fontSize: '28px', fontWeight: 'bold', color: systemHealth.memory.usagePercent > 90 ? '#dc3545' : systemHealth.memory.usagePercent > 70 ? '#ffc107' : '#28a745' }}>
-                    {systemHealth.memory.usagePercent}%
-                  </div>
-                  <div style={{ height: '6px', background: '#e9ecef', borderRadius: '3px', marginTop: '8px' }}>
-                    <div style={{ width: `${systemHealth.memory.usagePercent}%`, height: '100%', background: systemHealth.memory.usagePercent > 90 ? '#dc3545' : systemHealth.memory.usagePercent > 70 ? '#ffc107' : '#28a745', borderRadius: '3px' }} />
-                  </div>
-                  <div style={{ fontSize: '11px', color: colors.textMuted, marginTop: '8px' }}>
-                    {systemHealth.memory.usedFormatted} / {systemHealth.memory.totalFormatted}
-                  </div>
+                {/* Databases */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '15px' }}>
+                  {/* Frontend DB */}
+                  {systemHealth.frontend_db && (
+                    <div style={{ padding: '15px', background: colors.statBg, borderRadius: '8px' }}>
+                      <div style={{ fontSize: '14px', fontWeight: 'bold', marginBottom: '12px' }}>{systemHealth.frontend_db.database}</div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                        <div>
+                          <div style={{ fontSize: '11px', color: colors.textMuted }}>Connections</div>
+                          <div style={{ fontSize: '20px', fontWeight: 'bold', color: systemHealth.frontend_db.connections.usagePercent > 80 ? '#dc3545' : colors.text }}>
+                            {systemHealth.frontend_db.connections.active + systemHealth.frontend_db.connections.idle}/{systemHealth.frontend_db.connections.max}
+                          </div>
+                          <div style={{ height: '4px', background: '#e9ecef', borderRadius: '2px', marginTop: '4px' }}>
+                            <div style={{ width: `${systemHealth.frontend_db.connections.usagePercent}%`, height: '100%', background: systemHealth.frontend_db.connections.usagePercent > 80 ? '#dc3545' : '#28a745', borderRadius: '2px' }} />
+                          </div>
+                        </div>
+                        <div>
+                          <div style={{ fontSize: '11px', color: colors.textMuted }}>Cache Hit Ratio</div>
+                          <div style={{ fontSize: '20px', fontWeight: 'bold', color: systemHealth.frontend_db.cacheHitRatio < 90 ? '#ffc107' : '#28a745' }}>
+                            {systemHealth.frontend_db.cacheHitRatio}%
+                          </div>
+                        </div>
+                        <div>
+                          <div style={{ fontSize: '11px', color: colors.textMuted }}>Size</div>
+                          <div style={{ fontSize: '16px', fontWeight: 'bold' }}>{systemHealth.frontend_db.size}</div>
+                        </div>
+                        <div>
+                          <div style={{ fontSize: '11px', color: colors.textMuted }}>Deadlocks</div>
+                          <div style={{ fontSize: '16px', fontWeight: 'bold', color: systemHealth.frontend_db.deadlocks > 0 ? '#dc3545' : colors.text }}>
+                            {systemHealth.frontend_db.deadlocks}
+                          </div>
+                        </div>
+                      </div>
+                      {systemHealth.frontend_db.longRunningQueries.length > 0 && (
+                        <div style={{ marginTop: '12px', padding: '8px', background: '#fff3cd', borderRadius: '4px' }}>
+                          <div style={{ fontSize: '11px', color: '#856404', fontWeight: 'bold' }}>Long-running queries:</div>
+                          {systemHealth.frontend_db.longRunningQueries.map(q => (
+                            <div key={q.pid} style={{ fontSize: '11px', color: '#856404', marginTop: '4px' }}>
+                              PID {q.pid}: {q.duration} - {q.query}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Backend DB */}
+                  {systemHealth.backend_db && (
+                    <div style={{ padding: '15px', background: colors.statBg, borderRadius: '8px' }}>
+                      <div style={{ fontSize: '14px', fontWeight: 'bold', marginBottom: '12px' }}>{systemHealth.backend_db.database}</div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                        <div>
+                          <div style={{ fontSize: '11px', color: colors.textMuted }}>Connections</div>
+                          <div style={{ fontSize: '20px', fontWeight: 'bold', color: systemHealth.backend_db.connections.usagePercent > 80 ? '#dc3545' : colors.text }}>
+                            {systemHealth.backend_db.connections.active + systemHealth.backend_db.connections.idle}/{systemHealth.backend_db.connections.max}
+                          </div>
+                          <div style={{ height: '4px', background: '#e9ecef', borderRadius: '2px', marginTop: '4px' }}>
+                            <div style={{ width: `${systemHealth.backend_db.connections.usagePercent}%`, height: '100%', background: systemHealth.backend_db.connections.usagePercent > 80 ? '#dc3545' : '#28a745', borderRadius: '2px' }} />
+                          </div>
+                        </div>
+                        <div>
+                          <div style={{ fontSize: '11px', color: colors.textMuted }}>Cache Hit Ratio</div>
+                          <div style={{ fontSize: '20px', fontWeight: 'bold', color: systemHealth.backend_db.cacheHitRatio < 90 ? '#ffc107' : '#28a745' }}>
+                            {systemHealth.backend_db.cacheHitRatio}%
+                          </div>
+                        </div>
+                        <div>
+                          <div style={{ fontSize: '11px', color: colors.textMuted }}>Size</div>
+                          <div style={{ fontSize: '16px', fontWeight: 'bold' }}>{systemHealth.backend_db.size}</div>
+                        </div>
+                        <div>
+                          <div style={{ fontSize: '11px', color: colors.textMuted }}>Deadlocks</div>
+                          <div style={{ fontSize: '16px', fontWeight: 'bold', color: systemHealth.backend_db.deadlocks > 0 ? '#dc3545' : colors.text }}>
+                            {systemHealth.backend_db.deadlocks}
+                          </div>
+                        </div>
+                      </div>
+                      {systemHealth.backend_db.longRunningQueries.length > 0 && (
+                        <div style={{ marginTop: '12px', padding: '8px', background: '#fff3cd', borderRadius: '4px' }}>
+                          <div style={{ fontSize: '11px', color: '#856404', fontWeight: 'bold' }}>Long-running queries:</div>
+                          {systemHealth.backend_db.longRunningQueries.map(q => (
+                            <div key={q.pid} style={{ fontSize: '11px', color: '#856404', marginTop: '4px' }}>
+                              PID {q.pid}: {q.duration} - {q.query}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
 
-                {/* Disk */}
-                <div style={{ padding: '15px', background: colors.statBg, borderRadius: '8px' }}>
-                  <div style={{ fontSize: '12px', color: colors.textMuted, marginBottom: '8px' }}>Disk Usage</div>
-                  <div style={{ fontSize: '28px', fontWeight: 'bold', color: systemHealth.disk.usagePercent > 90 ? '#dc3545' : systemHealth.disk.usagePercent > 70 ? '#ffc107' : '#28a745' }}>
-                    {systemHealth.disk.usagePercent}%
-                  </div>
-                  <div style={{ height: '6px', background: '#e9ecef', borderRadius: '3px', marginTop: '8px' }}>
-                    <div style={{ width: `${systemHealth.disk.usagePercent}%`, height: '100%', background: systemHealth.disk.usagePercent > 90 ? '#dc3545' : systemHealth.disk.usagePercent > 70 ? '#ffc107' : '#28a745', borderRadius: '3px' }} />
-                  </div>
-                  <div style={{ fontSize: '11px', color: colors.textMuted, marginTop: '8px' }}>
-                    {systemHealth.disk.usedFormatted} / {systemHealth.disk.totalFormatted}
-                  </div>
-                </div>
-
-                {/* Uptime */}
-                <div style={{ padding: '15px', background: colors.statBg, borderRadius: '8px' }}>
-                  <div style={{ fontSize: '12px', color: colors.textMuted, marginBottom: '8px' }}>System Uptime</div>
-                  <div style={{ fontSize: '28px', fontWeight: 'bold', color: '#28a745' }}>
-                    {systemHealth.uptimeFormatted}
-                  </div>
-                  <div style={{ fontSize: '11px', color: colors.textMuted, marginTop: '8px' }}>
-                    {systemHealth.hostname} ({systemHealth.platform})
-                  </div>
+                <div style={{ fontSize: '11px', color: colors.textMuted, textAlign: 'right' }}>
+                  Last updated: {new Date(systemHealth.timestamp).toLocaleTimeString()}
                 </div>
               </div>
             ) : (
-              <p style={{ color: '#666' }}>Loading system health...</p>
+              <p style={{ color: '#666' }}>Loading infrastructure health...</p>
             )}
           </div>
 
