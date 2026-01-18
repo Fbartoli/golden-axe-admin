@@ -1,22 +1,33 @@
 'use client'
 
-import { useState } from 'react'
-import { useAdmin } from '@/components/AdminContext'
+import { useState, memo } from 'react'
+import { RefreshCw, Play, Square, Trash2 } from 'lucide-react'
 import { SyncStatus, SyncEvent } from '@/types'
-import { Button } from '@/components/ui/Button'
-import { Card } from '@/components/ui/Card'
-import { Badge } from '@/components/ui/Badge'
+import {
+  Button,
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  Badge,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+  Label,
+} from '@/components/ui'
+import { cn } from '@/lib/utils'
 
 type ViewMode = 'status' | 'live'
 
 interface SyncTabProps {
-  // Status data
   syncStatus: SyncStatus | null
   syncSpeed: Record<number, number>
   autoRefresh: boolean
   setAutoRefresh: (value: boolean) => void
   onRefresh: () => void
-  // Live data
   sseConnected: boolean
   syncEvents: SyncEvent[]
   setSyncEvents: (events: SyncEvent[]) => void
@@ -24,7 +35,7 @@ interface SyncTabProps {
   stopSyncStream: () => void
 }
 
-export function SyncTab({
+export const SyncTab = memo(function SyncTab({
   syncStatus,
   syncSpeed,
   autoRefresh,
@@ -36,244 +47,269 @@ export function SyncTab({
   startSyncStream,
   stopSyncStream,
 }: SyncTabProps) {
-  const { colors, styles, darkMode } = useAdmin()
   const [viewMode, setViewMode] = useState<ViewMode>('status')
 
-  const viewModeStyle = (mode: ViewMode) => ({
-    padding: '8px 16px',
-    background: viewMode === mode ? colors.primary : colors.cardBg,
-    color: viewMode === mode ? '#fff' : colors.text,
-    border: `1px solid ${viewMode === mode ? colors.primary : colors.border}`,
-    borderRadius: '4px',
-    cursor: 'pointer',
-    fontSize: '14px',
-    transition: 'all 0.2s ease',
-  })
-
   return (
-    <>
+    <div className="space-y-6">
       {/* View Mode Toggle */}
-      <div style={{ display: 'flex', gap: '8px', marginBottom: '20px', alignItems: 'center' }}>
-        <button style={viewModeStyle('status')} onClick={() => setViewMode('status')}>
+      <div className="flex items-center gap-2">
+        <Button
+          variant={viewMode === 'status' ? 'gold' : 'outline'}
+          onClick={() => setViewMode('status')}
+        >
           Status Overview
-        </button>
-        <button style={viewModeStyle('live')} onClick={() => setViewMode('live')}>
+        </Button>
+        <Button
+          variant={viewMode === 'live' ? 'gold' : 'outline'}
+          onClick={() => setViewMode('live')}
+          className="gap-2"
+        >
           Live Stream
           {sseConnected && (
-            <span style={{
-              display: 'inline-block',
-              width: '8px',
-              height: '8px',
-              background: '#28a745',
-              borderRadius: '50%',
-              marginLeft: '8px',
-              animation: 'pulse 2s infinite'
-            }} />
+            <span className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
           )}
-        </button>
+        </Button>
       </div>
 
       {/* Status View */}
       {viewMode === 'status' && (
-        <Card colors={colors} darkMode={darkMode}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
-            <h3 style={{ margin: 0 }}>Sync Status</h3>
-            <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-              <label style={{ fontSize: '14px', display: 'flex', alignItems: 'center', gap: '5px' }}>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle>Sync Status</CardTitle>
+            <div className="flex items-center gap-4">
+              <label className="flex items-center gap-2 text-sm">
                 <input
                   type="checkbox"
-                  name="autoRefresh"
+                  className="h-4 w-4 rounded border-border"
                   checked={autoRefresh}
                   onChange={(e) => setAutoRefresh(e.target.checked)}
                 />
                 Auto-refresh (5s)
               </label>
-              <Button onClick={onRefresh}>Refresh</Button>
+              <Button onClick={onRefresh} size="sm">
+                <RefreshCw className="h-4 w-4 mr-1" />
+                Refresh
+              </Button>
             </div>
-          </div>
+          </CardHeader>
+          <CardContent>
+            {!syncStatus ? (
+              <p className="text-muted-foreground">Loading...</p>
+            ) : (
+              <div className="space-y-6">
+                <div className="flex items-center gap-3 p-3 bg-secondary rounded-lg">
+                  <span className="font-medium">Database:</span>
+                  {syncStatus.dbConnected ? (
+                    <Badge variant="success">Connected - Syncing</Badge>
+                  ) : (
+                    <Badge variant="warning">No sync data yet</Badge>
+                  )}
+                </div>
 
-          {!syncStatus ? (
-            <p style={{ color: colors.textMuted }}>Loading...</p>
-          ) : (
-            <>
-              <div style={{ marginBottom: '20px', padding: '10px', background: colors.statBg, borderRadius: '4px' }}>
-                <strong>Database:</strong>
-                {syncStatus.dbConnected ? (
-                  <Badge variant="success" style={{ marginLeft: '10px' }}>Connected - Syncing</Badge>
-                ) : (
-                  <Badge variant="warning" style={{ marginLeft: '10px' }}>No sync data yet</Badge>
-                )}
-              </div>
-
-              <h4>Enabled Chains ({syncStatus.config.length})</h4>
-              <div style={{ overflowX: 'auto' }}>
-                <table style={styles.table}>
-                  <thead>
-                    <tr>
-                      <th style={styles.th}>Chain</th>
-                      <th style={styles.th}>Name</th>
-                      <th style={styles.th}>Batch Size</th>
-                      <th style={styles.th}>Concurrency</th>
-                      <th style={styles.th}>Start Block</th>
-                      <th style={styles.th}>Synced Block</th>
-                      <th style={styles.th}>Blocks</th>
-                      <th style={styles.th}>Logs</th>
-                      <th style={styles.th}>Speed</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {syncStatus.config.map((c) => {
-                      const status = syncStatus.chainStatus[c.chain]
-                      return (
-                        <tr key={c.chain}>
-                          <td style={styles.td}>{c.chain}</td>
-                          <td style={styles.td}>{c.name}</td>
-                          <td style={styles.td}>{c.batch_size}</td>
-                          <td style={styles.td}>{c.concurrency}</td>
-                          <td style={styles.td}>{c.start_block?.toLocaleString() || '-'}</td>
-                          <td style={styles.td}>
-                            {status?.latest_synced_block ? (
-                              <strong>{status.latest_synced_block.toLocaleString()}</strong>
-                            ) : (
-                              <span style={{ color: colors.textMuted }}>-</span>
-                            )}
-                          </td>
-                          <td style={styles.td}>
-                            {status?.total_blocks ? (
-                              status.total_blocks.toLocaleString()
-                            ) : (
-                              <span style={{ color: colors.textMuted }}>0</span>
-                            )}
-                          </td>
-                          <td style={styles.td}>
-                            {status?.total_logs ? (
-                              status.total_logs.toLocaleString()
-                            ) : (
-                              <span style={{ color: colors.textMuted }}>0</span>
-                            )}
-                          </td>
-                          <td style={styles.td}>
-                            {syncSpeed[c.chain] ? (
-                              <span style={{ color: '#28a745', fontWeight: 'bold' }}>
-                                {syncSpeed[c.chain]} blk/s
-                              </span>
-                            ) : (
-                              <span style={{ color: colors.textMuted }}>-</span>
-                            )}
-                          </td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
-              </div>
-
-              {Object.keys(syncStatus.chainStatus).length > 0 && (
-                <div style={{ marginTop: '20px' }}>
-                  <h4>Sync Summary</h4>
-                  <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
-                    {Object.entries(syncStatus.chainStatus).map(([chain, status]) => {
-                      const config = syncStatus.config.find((c) => c.chain === Number(chain))
-                      return (
-                        <div key={chain} style={{ ...styles.stat, minWidth: '200px' }}>
-                          <div style={{ fontWeight: 'bold', marginBottom: '5px' }}>
-                            {config?.name || `Chain ${chain}`}
-                          </div>
-                          <div>Block: {status.latest_synced_block?.toLocaleString() || '-'}</div>
-                          <div>Blocks: {status.total_blocks?.toLocaleString() || 0}</div>
-                          <div>Logs: {status.total_logs?.toLocaleString() || 0}</div>
-                        </div>
-                      )
-                    })}
+                <div>
+                  <h4 className="text-sm font-semibold mb-3">
+                    Enabled Chains ({syncStatus.config.length})
+                  </h4>
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Chain</TableHead>
+                          <TableHead>Name</TableHead>
+                          <TableHead>Batch Size</TableHead>
+                          <TableHead>Concurrency</TableHead>
+                          <TableHead>Start Block</TableHead>
+                          <TableHead>Synced Block</TableHead>
+                          <TableHead>Blocks</TableHead>
+                          <TableHead>Txs</TableHead>
+                          <TableHead>Logs</TableHead>
+                          <TableHead>Speed</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {syncStatus.config.map((c) => {
+                          const status = syncStatus.chainStatus[c.chain]
+                          return (
+                            <TableRow key={c.chain}>
+                              <TableCell className="font-mono">{c.chain}</TableCell>
+                              <TableCell className="font-medium">{c.name}</TableCell>
+                              <TableCell>{c.batch_size}</TableCell>
+                              <TableCell>{c.concurrency}</TableCell>
+                              <TableCell>{c.start_block?.toLocaleString() || '-'}</TableCell>
+                              <TableCell>
+                                {status?.latest_synced_block ? (
+                                  <strong className="text-gold">{status.latest_synced_block.toLocaleString()}</strong>
+                                ) : (
+                                  <span className="text-muted-foreground">-</span>
+                                )}
+                              </TableCell>
+                              <TableCell className="tabular-nums">
+                                {status?.total_blocks?.toLocaleString() || <span className="text-muted-foreground">0</span>}
+                              </TableCell>
+                              <TableCell className="tabular-nums">
+                                {status?.total_txs?.toLocaleString() || <span className="text-muted-foreground">0</span>}
+                              </TableCell>
+                              <TableCell className="tabular-nums">
+                                {status?.total_logs?.toLocaleString() || <span className="text-muted-foreground">0</span>}
+                              </TableCell>
+                              <TableCell>
+                                {syncSpeed[c.chain] ? (
+                                  <span className="text-green-500 font-bold">
+                                    {syncSpeed[c.chain]} blk/s
+                                  </span>
+                                ) : (
+                                  <span className="text-muted-foreground">-</span>
+                                )}
+                              </TableCell>
+                            </TableRow>
+                          )
+                        })}
+                      </TableBody>
+                    </Table>
                   </div>
                 </div>
-              )}
-            </>
-          )}
+
+                {Object.keys(syncStatus.chainStatus).length > 0 && (
+                  <div>
+                    <h4 className="text-sm font-semibold mb-3">Sync Summary</h4>
+                    <div className="flex flex-wrap gap-4">
+                      {Object.entries(syncStatus.chainStatus).map(([chain, status]) => {
+                        const config = syncStatus.config.find((c) => c.chain === Number(chain))
+                        return (
+                          <div key={chain} className="min-w-[200px] p-4 bg-secondary rounded-lg">
+                            <div className="font-bold mb-2">
+                              {config?.name || `Chain ${chain}`}
+                            </div>
+                            <div className="text-sm space-y-1 text-muted-foreground">
+                              <div>Block: <span className="text-foreground">{status.latest_synced_block?.toLocaleString() || '-'}</span></div>
+                              <div>Blocks: <span className="text-foreground">{status.total_blocks?.toLocaleString() || 0}</span></div>
+                              <div>Txs: <span className="text-foreground">{status.total_txs?.toLocaleString() || 0}</span></div>
+                              <div>Logs: <span className="text-foreground">{status.total_logs?.toLocaleString() || 0}</span></div>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </CardContent>
         </Card>
       )}
 
       {/* Live View */}
       {viewMode === 'live' && (
-        <Card colors={colors} darkMode={darkMode}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
-            <h3 style={{ margin: 0 }}>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle className="flex items-center gap-3">
               Live Sync Monitor
               {sseConnected ? (
-                <Badge variant="success" style={{ marginLeft: '10px' }}>Connected</Badge>
+                <Badge variant="success">Connected</Badge>
               ) : (
-                <Badge variant="danger" style={{ marginLeft: '10px' }}>Disconnected</Badge>
+                <Badge variant="error">Disconnected</Badge>
               )}
-            </h3>
-            <div style={{ display: 'flex', gap: '10px' }}>
-              <Button onClick={startSyncStream}>Reconnect</Button>
-              <Button variant="danger" onClick={stopSyncStream}>Stop</Button>
-              <Button variant="secondary" onClick={() => setSyncEvents([])}>Clear</Button>
+            </CardTitle>
+            <div className="flex gap-2">
+              <Button onClick={startSyncStream} size="sm">
+                <Play className="h-4 w-4 mr-1" />
+                Reconnect
+              </Button>
+              <Button variant="danger" onClick={stopSyncStream} size="sm">
+                <Square className="h-4 w-4 mr-1" />
+                Stop
+              </Button>
+              <Button variant="secondary" onClick={() => setSyncEvents([])} size="sm">
+                <Trash2 className="h-4 w-4 mr-1" />
+                Clear
+              </Button>
             </div>
-          </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {/* Chain Status Cards */}
+            {(() => {
+              const latestEvent = syncEvents[syncEvents.length - 1]
+              const chains = latestEvent?.chains || []
+              const connections = latestEvent?.connections || {}
+              const totalConnections = Object.values(connections).reduce(
+                (sum: number, pool: any) => sum + (pool?.active || 0) + (pool?.idle || 0),
+                0
+              )
 
-          <div style={{ display: 'flex', gap: '20px', marginBottom: '20px', flexWrap: 'wrap' }}>
-            {[1, 7777777].map(chain => {
-              const chainEvents = syncEvents.filter(e => e.chain === chain)
-              const latest = chainEvents.filter(e => e.new_block === 'local').slice(-1)[0]
-              const remote = chainEvents.filter(e => e.new_block === 'remote').slice(-1)[0]
               return (
-                <div key={chain} style={{ ...styles.stat, minWidth: '200px' }}>
-                  <div style={{ fontWeight: 'bold', marginBottom: '5px' }}>
-                    {chain === 1 ? 'Mainnet' : chain === 7777777 ? 'Zora' : `Chain ${chain}`}
+                <div className="flex flex-wrap gap-4">
+                  {chains.map((chain: any) => {
+                    const behind = parseInt(chain.behind) || 0
+                    const current = parseInt(chain.current) || 0
+                    const target = parseInt(chain.target) || 0
+                    const progress = target > 0 ? ((current / target) * 100).toFixed(2) : 0
+
+                    return (
+                      <div key={chain.chain} className="min-w-[220px] p-4 bg-secondary rounded-lg">
+                        <div className="flex items-center gap-2 font-bold mb-2">
+                          {chain.name || `Chain ${chain.chain}`}
+                          <span className={cn(
+                            "h-2 w-2 rounded-full",
+                            chain.running ? "bg-green-500" : "bg-red-500"
+                          )} />
+                        </div>
+                        <div className="text-sm space-y-1">
+                          <div>Current: <span className="font-mono">{current.toLocaleString()}</span></div>
+                          <div>Target: <span className="font-mono">{target.toLocaleString()}</span></div>
+                          <div className={cn(
+                            behind > 1000 ? "text-red-500" : behind > 100 ? "text-yellow-500" : "text-green-500"
+                          )}>
+                            Behind: {behind.toLocaleString()}
+                          </div>
+                          <div className="mt-2">
+                            <div className="h-1.5 bg-border rounded-full overflow-hidden">
+                              <div
+                                className="h-full bg-green-500 transition-all duration-300"
+                                style={{ width: `${Math.min(100, Number(progress))}%` }}
+                              />
+                            </div>
+                            <div className="text-xs text-muted-foreground mt-1">{progress}% synced</div>
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })}
+                  <div className="min-w-[180px] p-4 bg-secondary rounded-lg">
+                    <div className="font-bold mb-2">Connections</div>
+                    <div className="text-3xl font-bold text-gold">{totalConnections}</div>
+                    {Object.entries(connections).map(([pool, stats]: [string, any]) => (
+                      <div key={pool} className="text-xs text-muted-foreground">
+                        {pool}: {stats?.active || 0} active, {stats?.idle || 0} idle
+                      </div>
+                    ))}
                   </div>
-                  <div>Local: {latest?.num?.toLocaleString() || '-'}</div>
-                  <div>Remote: {remote?.num?.toLocaleString() || '-'}</div>
-                  {latest && remote && (
-                    <div style={{ color: remote.num! - latest.num! > 100 ? '#dc3545' : '#28a745' }}>
-                      Behind: {(remote.num! - latest.num!).toLocaleString()}
-                    </div>
-                  )}
                 </div>
               )
-            })}
-            <div style={styles.stat}>
-              <div style={{ fontWeight: 'bold', marginBottom: '5px' }}>Connections</div>
-              <div>{syncEvents.filter(e => e.active_connections !== undefined).slice(-1)[0]?.active_connections ?? '-'}</div>
-            </div>
-          </div>
+            })()}
 
-          <div style={{
-            background: darkMode ? '#1a1a2e' : '#1e1e1e',
-            color: '#d4d4d4',
-            padding: '15px',
-            borderRadius: '4px',
-            height: '400px',
-            overflow: 'auto',
-            fontFamily: 'monospace',
-            fontSize: '12px'
-          }}>
-            {syncEvents.slice().reverse().map((event, i) => (
-              <div key={i} style={{ marginBottom: '4px' }}>
-                <span style={{ color: '#888' }}>{new Date(event.timestamp).toLocaleTimeString()}</span>
-                {event.chain && (
-                  <>
-                    <span style={{ color: '#569cd6' }}> [{event.chain === 1 ? 'ETH' : event.chain === 7777777 ? 'ZORA' : event.chain}]</span>
-                    <span style={{ color: event.new_block === 'local' ? '#4ec9b0' : '#ce9178' }}> {event.new_block}</span>
-                    <span style={{ color: '#b5cea8' }}> #{event.num?.toLocaleString()}</span>
-                  </>
-                )}
-                {event.active_connections !== undefined && (
-                  <span style={{ color: '#dcdcaa' }}> connections: {event.active_connections}</span>
-                )}
-              </div>
-            ))}
-            {syncEvents.length === 0 && <div style={{ color: '#888' }}>Waiting for events…</div>}
-          </div>
+            {/* Log output */}
+            <div className="bg-dark-black rounded-lg p-4 h-[400px] overflow-auto font-mono text-xs">
+              {syncEvents.slice().reverse().map((event, i) => (
+                <div key={i} className="mb-1">
+                  <span className="text-muted-foreground">{new Date(event.timestamp).toLocaleTimeString()}</span>
+                  {event.chains?.map((chain: any) => (
+                    <span key={chain.chain}>
+                      <span className="text-blue-400"> [{chain.name || chain.chain}]</span>
+                      <span className="text-cyan-400"> #{parseInt(chain.current).toLocaleString()}</span>
+                      <span className={parseInt(chain.behind) > 100 ? "text-orange-400" : "text-green-400"}>
+                        {' '}(-{parseInt(chain.behind).toLocaleString()})
+                      </span>
+                    </span>
+                  ))}
+                </div>
+              ))}
+              {syncEvents.length === 0 && (
+                <div className="text-muted-foreground">Waiting for events...</div>
+              )}
+            </div>
+          </CardContent>
         </Card>
       )}
-
-      <style>{`
-        @keyframes pulse {
-          0%, 100% { opacity: 1; }
-          50% { opacity: 0.5; }
-        }
-      `}</style>
-    </>
+    </div>
   )
-}
+})

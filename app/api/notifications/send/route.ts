@@ -24,7 +24,7 @@ async function sendWebhook(webhook: any, alert: Alert): Promise<{ success: boole
         'X-Alert-Severity': alert.severity,
       },
       body: JSON.stringify({
-        source: 'golden-axe',
+        source: 'horusblock',
         alert: {
           type: alert.type,
           severity: alert.severity,
@@ -86,7 +86,7 @@ async function sendEmail(emailConfig: any, alert: Alert): Promise<{ success: boo
         body: JSON.stringify({
           From: 'alerts@indexsupply.net',
           To: emailConfig.email,
-          Subject: `[${alert.severity.toUpperCase()}] Golden Axe Alert: ${alert.message}`,
+          Subject: `[${alert.severity.toUpperCase()}] Horusblock Alert: ${alert.message}`,
           TextBody: `
 Alert Type: ${alert.type}
 Severity: ${alert.severity}
@@ -96,7 +96,7 @@ ${alert.details ? `Details: ${alert.details}` : ''}
 Time: ${new Date(alert.timestamp).toLocaleString()}
 
 ---
-Golden Axe Admin Panel
+Horusblock Admin Panel
           `.trim(),
           HtmlBody: `
 <h2 style="color: ${alert.severity === 'critical' ? '#dc3545' : alert.severity === 'warning' ? '#ffc107' : '#17a2b8'}">
@@ -109,7 +109,7 @@ Golden Axe Admin Panel
   ${alert.details ? `<tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Details:</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${alert.details}</td></tr>` : ''}
   <tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Time:</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${new Date(alert.timestamp).toLocaleString()}</td></tr>
 </table>
-<p style="color: #666; font-size: 12px;">Golden Axe Admin Panel</p>
+<p style="color: #666; font-size: 12px;">Horusblock Admin Panel</p>
           `.trim(),
         }),
         signal: AbortSignal.timeout(10000),

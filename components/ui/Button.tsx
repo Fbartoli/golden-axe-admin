@@ -1,48 +1,66 @@
-import { CSSProperties, ButtonHTMLAttributes } from 'react'
-import { palette } from '@/styles/theme'
+import * as React from "react"
+import { Slot } from "@radix-ui/react-slot"
+import { cva, type VariantProps } from "class-variance-authority"
 
-type ButtonVariant = 'primary' | 'danger' | 'success' | 'secondary' | 'warning'
+import { cn } from "@/lib/utils"
 
-interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: ButtonVariant
-  size?: 'sm' | 'md' | 'lg'
-}
-
-const variantStyles: Record<ButtonVariant, CSSProperties> = {
-  primary: { background: palette.primary, color: '#fff' },
-  danger: { background: palette.danger, color: '#fff' },
-  success: { background: palette.success, color: '#fff' },
-  secondary: { background: palette.secondary, color: '#fff' },
-  warning: { background: palette.warning, color: '#000' },
-}
-
-const sizeStyles: Record<'sm' | 'md' | 'lg', CSSProperties> = {
-  sm: { padding: '4px 8px', fontSize: '12px' },
-  md: { padding: '8px 16px', fontSize: '14px' },
-  lg: { padding: '12px 24px', fontSize: '16px' },
-}
-
-export function Button({
-  variant = 'primary',
-  size = 'md',
-  style,
-  children,
-  ...props
-}: ButtonProps) {
-  const baseStyle: CSSProperties = {
-    border: 'none',
-    borderRadius: '4px',
-    cursor: props.disabled ? 'not-allowed' : 'pointer',
-    transition: 'opacity 0.2s',
-    opacity: props.disabled ? 0.6 : 1,
-    ...variantStyles[variant],
-    ...sizeStyles[size],
-    ...style,
+const buttonVariants = cva(
+  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
+  {
+    variants: {
+      variant: {
+        default:
+          "bg-primary text-primary-foreground shadow hover:bg-primary/90",
+        destructive:
+          "bg-destructive text-destructive-foreground shadow-sm hover:bg-destructive/90",
+        outline:
+          "border border-input bg-background shadow-sm hover:bg-accent hover:text-accent-foreground",
+        secondary:
+          "bg-secondary text-secondary-foreground shadow-sm hover:bg-secondary/80",
+        ghost: "hover:bg-accent hover:text-accent-foreground",
+        link: "text-primary underline-offset-4 hover:underline",
+        // Custom variants for admin panel
+        success:
+          "bg-green-600 text-white shadow-sm hover:bg-green-700",
+        danger:
+          "bg-red-600 text-white shadow-sm hover:bg-red-700",
+        warning:
+          "bg-yellow-600 text-black shadow-sm hover:bg-yellow-700",
+        gold:
+          "bg-gold text-black shadow-sm hover:bg-gold-light",
+      },
+      size: {
+        default: "h-9 px-4 py-2",
+        sm: "h-8 rounded-md px-3 text-xs",
+        lg: "h-10 rounded-md px-8",
+        icon: "h-9 w-9",
+      },
+    },
+    defaultVariants: {
+      variant: "default",
+      size: "default",
+    },
   }
+)
 
-  return (
-    <button style={baseStyle} {...props}>
-      {children}
-    </button>
-  )
+export interface ButtonProps
+  extends React.ButtonHTMLAttributes<HTMLButtonElement>,
+    VariantProps<typeof buttonVariants> {
+  asChild?: boolean
 }
+
+const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
+  ({ className, variant, size, asChild = false, ...props }, ref) => {
+    const Comp = asChild ? Slot : "button"
+    return (
+      <Comp
+        className={cn(buttonVariants({ variant, size, className }))}
+        ref={ref}
+        {...props}
+      />
+    )
+  }
+)
+Button.displayName = "Button"
+
+export { Button, buttonVariants }

@@ -1,16 +1,21 @@
 import { NextResponse } from 'next/server'
+import { querySchema, validateBody } from '@/lib/validation'
 
-const BE_URL = process.env.BE_URL || 'http://golden-axe-be:8000'
+const BE_URL = process.env.BE_URL || 'http://horusblock-be:8000'
 
 export async function POST(req: Request) {
-  const body = await req.json()
-  const { query, chain, api_key, event_signatures = [] } = body
+  const validation = await validateBody(req, querySchema)
+  if (!validation.success) {
+    return NextResponse.json({ success: false, error: validation.error }, { status: 400 })
+  }
+
+  const { query, chain, api_key, event_signatures } = validation.data
 
   try {
     // The backend expects chain as a query parameter
     const payload = [{
       query,
-      event_signatures,
+      event_signatures: event_signatures ? event_signatures.split(',').map(s => s.trim()).filter(Boolean) : [],
     }]
 
     const res = await fetch(`${BE_URL}/query?chain=${chain}`, {

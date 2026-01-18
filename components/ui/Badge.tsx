@@ -1,41 +1,48 @@
-import { CSSProperties, ReactNode } from 'react'
-import { palette, severityColors, statusColors } from '@/styles/theme'
+import * as React from "react"
+import { cva, type VariantProps } from "class-variance-authority"
 
-type BadgeVariant = 'primary' | 'success' | 'danger' | 'warning' | 'secondary'
-type BadgeSeverity = 'info' | 'warning' | 'critical'
-type BadgeStatus = 'healthy' | 'unhealthy' | 'unknown'
+import { cn } from "@/lib/utils"
 
-interface BadgeProps {
-  children: ReactNode
-  variant?: BadgeVariant
-  severity?: BadgeSeverity
-  status?: BadgeStatus
-  color?: string
-  style?: CSSProperties
-  title?: string
+const badgeVariants = cva(
+  "inline-flex items-center rounded-md border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2",
+  {
+    variants: {
+      variant: {
+        default:
+          "border-transparent bg-primary text-primary-foreground shadow hover:bg-primary/80",
+        secondary:
+          "border-transparent bg-secondary text-secondary-foreground hover:bg-secondary/80",
+        destructive:
+          "border-transparent bg-destructive text-destructive-foreground shadow hover:bg-destructive/80",
+        outline: "text-foreground",
+        // Status variants for the admin panel
+        success:
+          "border-transparent bg-green-600/20 text-green-400 hover:bg-green-600/30",
+        warning:
+          "border-transparent bg-yellow-600/20 text-yellow-400 hover:bg-yellow-600/30",
+        error:
+          "border-transparent bg-red-600/20 text-red-400 hover:bg-red-600/30",
+        info:
+          "border-transparent bg-blue-600/20 text-blue-400 hover:bg-blue-600/30",
+        // Gold variant for Horusblock brand
+        gold:
+          "border-transparent bg-gold/20 text-gold hover:bg-gold/30",
+      },
+    },
+    defaultVariants: {
+      variant: "default",
+    },
+  }
+)
+
+export interface BadgeProps
+  extends React.HTMLAttributes<HTMLDivElement>,
+    VariantProps<typeof badgeVariants> {}
+
+function Badge({ className, variant, ...props }: BadgeProps) {
+  return (
+    <div className={cn(badgeVariants({ variant }), className)} {...props} />
+  )
 }
 
-export function Badge({ children, variant, severity, status, color, style, title }: BadgeProps) {
-  let bgColor = color || palette.primary
-
-  if (variant) {
-    bgColor = palette[variant]
-  } else if (severity) {
-    bgColor = severityColors[severity]
-  } else if (status) {
-    bgColor = statusColors[status]
-  }
-
-  const badgeStyle: CSSProperties = {
-    padding: '2px 8px',
-    background: bgColor,
-    color: bgColor === palette.warning ? '#000' : '#fff',
-    borderRadius: '12px',
-    fontSize: '12px',
-    fontWeight: 'bold',
-    display: 'inline-block',
-    ...style,
-  }
-
-  return <span style={badgeStyle} title={title}>{children}</span>
-}
+export { Badge, badgeVariants }

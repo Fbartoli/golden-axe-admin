@@ -1,58 +1,22 @@
-import { CSSProperties, InputHTMLAttributes } from 'react'
-import { Colors } from '@/styles/theme'
+import * as React from "react"
 
-interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
-  colors: Colors
-  variant?: 'default' | 'inline' | 'search'
-}
+import { cn } from "@/lib/utils"
 
-export function Input({ colors, variant = 'default', style, ...props }: InputProps) {
-  const baseStyle: CSSProperties = {
-    padding: '8px',
-    border: `1px solid ${colors.border}`,
-    borderRadius: '4px',
-    background: colors.inputBg,
-    color: colors.text,
-    ...style,
+const Input = React.forwardRef<HTMLInputElement, React.ComponentProps<"input">>(
+  ({ className, type, ...props }, ref) => {
+    return (
+      <input
+        type={type}
+        className={cn(
+          "flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 md:text-sm",
+          className
+        )}
+        ref={ref}
+        {...props}
+      />
+    )
   }
+)
+Input.displayName = "Input"
 
-  const variantStyles: Record<string, CSSProperties> = {
-    default: {
-      marginRight: '10px',
-      marginBottom: '10px',
-    },
-    inline: {
-      width: '70px',
-      padding: '4px 6px',
-      textAlign: 'center',
-    },
-    search: {
-      padding: '8px 12px',
-      width: '200px',
-      fontSize: '14px',
-    },
-  }
-
-  return <input style={{ ...baseStyle, ...variantStyles[variant] }} {...props} />
-}
-
-interface TextAreaProps extends React.TextareaHTMLAttributes<HTMLTextAreaElement> {
-  colors: Colors
-}
-
-export function TextArea({ colors, style, ...props }: TextAreaProps) {
-  const textareaStyle: CSSProperties = {
-    width: '100%',
-    padding: '12px',
-    border: `1px solid ${colors.border}`,
-    borderRadius: '4px',
-    fontFamily: 'monospace',
-    fontSize: '13px',
-    resize: 'vertical',
-    background: colors.inputBg,
-    color: colors.text,
-    ...style,
-  }
-
-  return <textarea style={textareaStyle} {...props} />
-}
+export { Input }

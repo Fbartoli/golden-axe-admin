@@ -1,27 +1,32 @@
-import { useState, useEffect, useMemo } from 'react'
-import { getColors, getStyles } from '@/styles/theme'
+import { useState, useEffect } from 'react'
 
 export function useDarkMode() {
-  const [darkMode, setDarkMode] = useState(() => {
-    if (typeof window === 'undefined') return false
+  // Default to dark mode (Horusblock brand)
+  const [darkMode, setDarkMode] = useState(true)
+  const [isHydrated, setIsHydrated] = useState(false)
+
+  // Read from localStorage after hydration
+  useEffect(() => {
     try {
       const saved = localStorage.getItem('darkMode')
-      return saved ? JSON.parse(saved) : false
+      if (saved !== null) {
+        setDarkMode(saved === 'true')
+      }
     } catch {
-      return false
+      // Ignore localStorage errors
     }
-  })
+    setIsHydrated(true)
+  }, [])
 
-  // Save preference to localStorage
+  // Save preference to localStorage and update document class
   useEffect(() => {
-    localStorage.setItem('darkMode', JSON.stringify(darkMode))
-  }, [darkMode])
+    if (isHydrated) {
+      localStorage.setItem('darkMode', String(darkMode))
+      document.documentElement.classList.toggle('light', !darkMode)
+    }
+  }, [darkMode, isHydrated])
 
-  const toggleDarkMode = () => setDarkMode((d: boolean) => !d)
+  const toggleDarkMode = () => setDarkMode(d => !d)
 
-  // Memoize colors and styles
-  const colors = useMemo(() => getColors(darkMode), [darkMode])
-  const styles = useMemo(() => getStyles(colors, darkMode), [colors, darkMode])
-
-  return { darkMode, setDarkMode, toggleDarkMode, colors, styles }
+  return { darkMode, setDarkMode, toggleDarkMode }
 }

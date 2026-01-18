@@ -1,4 +1,5 @@
 import { beSql } from '@/lib/db'
+import { getHealthDetailed, getStatus } from '@/lib/backend-api'
 import { NextResponse } from 'next/server'
 
 export const dynamic = 'force-dynamic'
@@ -13,61 +14,53 @@ interface SyncSnapshot {
 }
 
 // In-memory storage for sync history (last 24 hours)
-// In production, you'd store this in a database table
 const syncHistory: Map<number, SyncSnapshot[]> = new Map()
 const MAX_HISTORY_POINTS = 288 // 24 hours at 5-minute intervals
 
 export async function GET() {
   try {
-    // Get current sync status from config (from backend database)
-    const configs = await beSql`
-      SELECT chain, name, start_block, url
-      FROM config
-      WHERE enabled = true
-      ORDER BY chain
-    `
+    // Fetch backend API data and config (for URLs) in parallel
+    const [health, status, configs] = await Promise.all([
+      getHealthDetailed().catch(() => null),
+      getStatus().catch(() => null),
+      // Keep config query for RPC URLs (not in backend API)
+      beSql`
+        SELECT chain, name, start_block, url
+        FROM config
+        WHERE enabled = true
+        ORDER BY chain
+      `,
+    ])
 
-    // Get current block counts for each chain - parallelize all queries
-    const chainData: SyncSnapshot[] = await Promise.all(
-      configs.map(async (config) => {
-        try {
-          // Run block and log queries in parallel for each chain
-          const [blockStats, logStats] = await Promise.all([
-            beSql`
-              SELECT
-                count(1)::int as block_count,
-                max(num)::int as latest_block
-              FROM blocks
-              WHERE chain = ${config.chain}
-            `,
-            beSql`
-              SELECT count(1)::int as log_count
-              FROM logs
-              WHERE chain = ${config.chain}
-            `
-          ])
+    // Build chain data from backend API or fallback to config
+    const chainData: SyncSnapshot[] = []
 
-          return {
-            chain: config.chain,
-            name: config.name,
-            block_count: blockStats[0]?.block_count || 0,
-            log_count: logStats[0]?.log_count || 0,
-            latest_block: blockStats[0]?.latest_block || 0,
-            timestamp: new Date().toISOString(),
-          }
-        } catch (e) {
-          // Chain might not have data yet
-          return {
-            chain: config.chain,
-            name: config.name,
-            block_count: 0,
-            log_count: 0,
-            latest_block: 0,
-            timestamp: new Date().toISOString(),
-          }
-        }
-      })
-    )
+    if (health?.checks?.sync?.chains) {
+      // Use backend API data
+      for (const chain of health.checks.sync.chains) {
+        const chainId = parseInt(chain.chain_id, 10)
+        chainData.push({
+          chain: chainId,
+          name: chain.chain_name,
+          block_count: 0, // Backend doesn't provide block count
+          log_count: 0, // Backend doesn't provide log count
+          latest_block: parseInt(chain.synced_block, 10) || 0,
+          timestamp: new Date().toISOString(),
+        })
+      }
+    } else {
+      // Fallback to config-only data
+      for (const config of configs) {
+        chainData.push({
+          chain: config.chain,
+          name: config.name,
+          block_count: 0,
+          log_count: 0,
+          latest_block: 0,
+          timestamp: new Date().toISOString(),
+        })
+      }
+    }
 
     // Store snapshots in history
     for (const snapshot of chainData) {
@@ -93,15 +86,17 @@ export async function GET() {
         const timeDiffHours = (new Date(newest.timestamp).getTime() - new Date(oldest.timestamp).getTime()) / (1000 * 60 * 60)
 
         if (timeDiffHours > 0) {
+          // Calculate rate based on latest_block changes
+          const blocksDiff = newest.latest_block - oldest.latest_block
           syncRates[chain] = {
-            blocksPerHour: Math.round((newest.block_count - oldest.block_count) / timeDiffHours),
-            logsPerHour: Math.round((newest.log_count - oldest.log_count) / timeDiffHours),
+            blocksPerHour: Math.round(blocksDiff / timeDiffHours),
+            logsPerHour: 0, // Not tracked without log counts
           }
         }
       }
     }
 
-    // Get RPC remote block numbers for comparison - parallelize all RPC calls
+    // Get RPC remote block numbers for comparison
     const rpcResults = await Promise.all(
       configs.map(async (config) => {
         if (!config.url) return { chain: config.chain, block: null }
@@ -120,7 +115,7 @@ export async function GET() {
           const data = await response.json()
           return {
             chain: config.chain,
-            block: data.result ? parseInt(data.result, 16) : null
+            block: data.result ? parseInt(data.result, 16) : null,
           }
         } catch (e) {
           return { chain: config.chain, block: null }
@@ -135,30 +130,20 @@ export async function GET() {
       }
     }
 
-    // Build a map of start_block per chain for accurate progress calculation
+    // Build start_block map from config
     const startBlocks: Record<number, number> = Object.fromEntries(
-      configs.map(config => [config.chain, config.start_block || 0])
+      configs.map((config) => [config.chain, config.start_block || 0])
     )
 
-    // Calculate how far behind each chain is
+    // Calculate sync status - use backend data if available
     const syncStatus: Record<number, { behind: number; percentSynced: number; estimatedTimeToSync: string }> = {}
 
-    for (const chain of chainData) {
-      const remoteBlock = rpcBlocks[chain.chain]
-      const localBlock = chain.latest_block
-      const startBlock = startBlocks[chain.chain] || 0
-      const rate = syncRates[chain.chain]
-
-      if (remoteBlock) {
-        // Handle case where syncing hasn't started yet (localBlock is 0 or undefined)
-        const effectiveLocalBlock = localBlock || startBlock
-        const behind = remoteBlock - effectiveLocalBlock
-        // Calculate progress relative to start_block, not from block 0
-        const totalToSync = remoteBlock - startBlock
-        const synced = effectiveLocalBlock - startBlock
-        const percentSynced = totalToSync > 0
-          ? Math.min(100, Math.max(0, Math.round((synced / totalToSync) * 100)))
-          : 0
+    if (health?.checks?.sync?.chains) {
+      // Use backend-provided sync status
+      for (const chain of health.checks.sync.chains) {
+        const chainId = parseInt(chain.chain_id, 10)
+        const rate = syncRates[chainId]
+        const behind = chain.blocks_behind
 
         let estimatedTimeToSync = 'N/A'
         if (rate && rate.blocksPerHour > 0 && behind > 0) {
@@ -170,14 +155,51 @@ export async function GET() {
           } else {
             estimatedTimeToSync = `${Math.round(hoursToSync / 24)} days`
           }
-        } else if (behind === 0) {
+        } else if (behind === 0 || chain.status === 'synced') {
           estimatedTimeToSync = 'Synced'
         }
 
-        syncStatus[chain.chain] = {
+        syncStatus[chainId] = {
           behind,
-          percentSynced,
+          percentSynced: chain.sync_percentage,
           estimatedTimeToSync,
+        }
+      }
+    } else {
+      // Fallback to calculating from RPC blocks
+      for (const chain of chainData) {
+        const remoteBlock = rpcBlocks[chain.chain]
+        const localBlock = chain.latest_block
+        const startBlock = startBlocks[chain.chain] || 0
+        const rate = syncRates[chain.chain]
+
+        if (remoteBlock) {
+          const effectiveLocalBlock = localBlock || startBlock
+          const behind = remoteBlock - effectiveLocalBlock
+          const totalToSync = remoteBlock - startBlock
+          const synced = effectiveLocalBlock - startBlock
+          const percentSynced =
+            totalToSync > 0 ? Math.min(100, Math.max(0, Math.round((synced / totalToSync) * 100))) : 0
+
+          let estimatedTimeToSync = 'N/A'
+          if (rate && rate.blocksPerHour > 0 && behind > 0) {
+            const hoursToSync = behind / rate.blocksPerHour
+            if (hoursToSync < 1) {
+              estimatedTimeToSync = `${Math.round(hoursToSync * 60)} minutes`
+            } else if (hoursToSync < 24) {
+              estimatedTimeToSync = `${Math.round(hoursToSync)} hours`
+            } else {
+              estimatedTimeToSync = `${Math.round(hoursToSync / 24)} days`
+            }
+          } else if (behind === 0) {
+            estimatedTimeToSync = 'Synced'
+          }
+
+          syncStatus[chain.chain] = {
+            behind,
+            percentSynced,
+            estimatedTimeToSync,
+          }
         }
       }
     }
@@ -188,7 +210,7 @@ export async function GET() {
     for (const [chain, history] of Array.from(syncHistory.entries())) {
       const last12 = history.slice(-12)
       chartData[chain] = {
-        blocks: last12.map((h: SyncSnapshot) => h.block_count),
+        blocks: last12.map((h: SyncSnapshot) => h.latest_block),
         timestamps: last12.map((h: SyncSnapshot) => h.timestamp),
       }
     }

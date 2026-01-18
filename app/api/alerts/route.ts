@@ -1,4 +1,5 @@
 import { beSql, sql } from '@/lib/db'
+import { getHealthDetailed } from '@/lib/backend-api'
 import { NextResponse } from 'next/server'
 
 export const dynamic = 'force-dynamic'
@@ -48,19 +49,15 @@ function generateAlertId(): string {
 // Send notification for a new alert
 async function sendNotification(alert: Alert) {
   try {
-    // Generate a unique key for this alert to avoid duplicate notifications
     const alertKey = `${alert.type}-${alert.chain || 'system'}-${alert.severity}`
 
-    // Only send notification if we haven't sent one for this alert type recently
     if (previousState.notifiedAlerts.has(alertKey)) {
       return
     }
 
-    // Mark as notified (will be cleared after 10 minutes)
     previousState.notifiedAlerts.add(alertKey)
     setTimeout(() => previousState.notifiedAlerts.delete(alertKey), 10 * 60 * 1000)
 
-    // Call the notification sender
     await fetch(`${process.env.NEXT_PUBLIC_URL || 'http://localhost:3000'}/api/notifications/send`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -72,7 +69,6 @@ async function sendNotification(alert: Alert) {
 }
 
 async function addAlert(alert: Omit<Alert, 'id' | 'timestamp' | 'acknowledged'>) {
-  // Check for duplicate recent alerts (same type and chain within 5 minutes)
   const fiveMinutesAgo = Date.now() - 5 * 60 * 1000
   const isDuplicate = alerts.some(
     a =>
@@ -91,19 +87,17 @@ async function addAlert(alert: Omit<Alert, 'id' | 'timestamp' | 'acknowledged'>)
 
     alerts.unshift(newAlert)
 
-    // Keep only MAX_ALERTS
     if (alerts.length > MAX_ALERTS) {
       alerts.pop()
     }
 
-    // Send notification for critical and warning alerts
     if (alert.severity === 'critical' || alert.severity === 'warning') {
       sendNotification(newAlert)
     }
   }
 }
 
-// Load custom alert rules from database
+// Load custom alert rules from database (frontend DB)
 async function loadAlertRules(): Promise<AlertRule[]> {
   try {
     const rules = await sql`
@@ -113,7 +107,6 @@ async function loadAlertRules(): Promise<AlertRule[]> {
     `
     return rules as unknown as AlertRule[]
   } catch (e) {
-    // Table might not exist yet
     return []
   }
 }
@@ -132,15 +125,17 @@ function checkRule(rule: AlertRule, value: number): boolean {
 
 async function checkAlerts() {
   try {
-    // Load custom rules
-    const rules = await loadAlertRules()
-
-    // Get enabled chains (from backend database)
-    const configs = await beSql`
-      SELECT chain, name, url
-      FROM config
-      WHERE enabled = true
-    `
+    // Load custom rules and fetch backend health + config for URLs in parallel
+    const [rules, health, configs] = await Promise.all([
+      loadAlertRules(),
+      getHealthDetailed().catch(() => null),
+      // Keep config query for RPC URLs
+      beSql`
+        SELECT chain, name, url
+        FROM config
+        WHERE enabled = true
+      `,
+    ])
 
     const now = Date.now()
     const timeSinceLastCheck = now - previousState.lastCheck
@@ -148,8 +143,42 @@ async function checkAlerts() {
     // Track current metrics for custom rules
     const metrics: Record<string, { value: number; chain?: number; chainName?: string }> = {}
 
+    // Check sync status from backend API
+    if (health?.checks?.sync?.chains) {
+      for (const chain of health.checks.sync.chains) {
+        const chainId = parseInt(chain.chain_id, 10)
+        const behind = chain.blocks_behind
+
+        metrics[`sync_behind_${chainId}`] = { value: behind, chain: chainId, chainName: chain.chain_name }
+
+        // Alert if more than 100 blocks behind
+        if (behind > 100) {
+          addAlert({
+            type: 'sync_behind',
+            severity: behind > 1000 ? 'critical' : 'warning',
+            chain: chainId,
+            chainName: chain.chain_name,
+            message: `Chain is ${behind.toLocaleString()} blocks behind`,
+            details: `Synced: ${chain.synced_block}, Head: ${chain.head_block}`,
+          })
+        }
+
+        // Check for stalled sync
+        if (chain.status === 'stalled') {
+          addAlert({
+            type: 'sync_stalled',
+            severity: 'warning',
+            chain: chainId,
+            chainName: chain.chain_name,
+            message: 'Sync appears to be stalled',
+            details: `Status: ${chain.status}`,
+          })
+        }
+      }
+    }
+
+    // Check RPC health for each chain (using URLs from config)
     for (const config of configs) {
-      // Check RPC health
       try {
         const rpcStart = Date.now()
         const response = await fetch(config.url, {
@@ -165,7 +194,6 @@ async function checkAlerts() {
         })
         const rpcLatency = Date.now() - rpcStart
 
-        // Store RPC latency metric
         metrics[`rpc_latency_${config.chain}`] = { value: rpcLatency, chain: config.chain, chainName: config.name }
 
         if (!response.ok) {
@@ -187,56 +215,6 @@ async function checkAlerts() {
               chainName: config.name,
               message: `RPC error: ${data.error.message}`,
             })
-          } else {
-            // Check sync status
-            const remoteBlock = parseInt(data.result, 16)
-
-            const localBlockResult = await beSql`
-              SELECT max(num)::int as latest_block
-              FROM blocks
-              WHERE chain = ${config.chain}
-            `
-            const localBlock = localBlockResult[0]?.latest_block || 0
-            const behind = remoteBlock - localBlock
-
-            // Store sync_behind metric
-            metrics[`sync_behind_${config.chain}`] = { value: behind, chain: config.chain, chainName: config.name }
-
-            // Default alert if more than 100 blocks behind
-            if (behind > 100) {
-              addAlert({
-                type: 'sync_behind',
-                severity: behind > 1000 ? 'critical' : 'warning',
-                chain: config.chain,
-                chainName: config.name,
-                message: `Chain is ${behind.toLocaleString()} blocks behind`,
-                details: `Local: ${localBlock.toLocaleString()}, Remote: ${remoteBlock.toLocaleString()}`,
-              })
-            }
-
-            // Check for stalled sync
-            if (timeSinceLastCheck > 60000) {
-              const prevBlockCount = previousState.blockCounts[config.chain] || 0
-              const currentBlockResult = await beSql`
-                SELECT count(1)::int as block_count
-                FROM blocks
-                WHERE chain = ${config.chain}
-              `
-              const currentBlockCount = currentBlockResult[0]?.block_count || 0
-
-              if (prevBlockCount > 0 && currentBlockCount === prevBlockCount && behind > 0) {
-                addAlert({
-                  type: 'sync_stalled',
-                  severity: 'warning',
-                  chain: config.chain,
-                  chainName: config.name,
-                  message: 'Sync appears to be stalled',
-                  details: `No new blocks synced in the last check interval`,
-                })
-              }
-
-              previousState.blockCounts[config.chain] = currentBlockCount
-            }
           }
         }
       } catch (e: any) {
@@ -253,7 +231,6 @@ async function checkAlerts() {
     // Check database health
     for (const [dbName, dbConn] of [['Frontend DB', sql], ['Backend DB', beSql]] as const) {
       try {
-        // Connection usage
         const [connStats] = await dbConn`
           SELECT
             (SELECT count(*) FROM pg_stat_activity WHERE state = 'active') as active,
@@ -282,7 +259,6 @@ async function checkAlerts() {
           })
         }
 
-        // Cache hit ratio
         const [cacheStats] = await dbConn`
           SELECT
             CASE
@@ -305,7 +281,6 @@ async function checkAlerts() {
           })
         }
 
-        // Long-running queries (> 60 seconds)
         const longQueries = await dbConn`
           SELECT pid, now() - query_start as duration, left(query, 100) as query
           FROM pg_stat_activity
@@ -324,14 +299,11 @@ async function checkAlerts() {
           })
         }
 
-        // Deadlocks (check if count increased)
         const [deadlockStats] = await dbConn`
           SELECT deadlocks FROM pg_stat_database WHERE datname = current_database()
         `
         const deadlocks = Number(deadlockStats?.deadlocks) || 0
 
-        // We'd need to track previous deadlock count to detect new ones
-        // For now, just alert if there are any (they persist until stats reset)
         metrics[`db_deadlocks_${dbName}`] = { value: deadlocks }
 
       } catch (e: any) {
@@ -344,48 +316,33 @@ async function checkAlerts() {
       }
     }
 
-    // Check backend service health
+    // Check backend service health (use health data if already fetched)
     const beUrl = process.env.BE_URL
     if (beUrl) {
-      try {
-        const start = performance.now()
-        const healthUrl = beUrl.replace(/\/$/, '') + '/health'
-
-        let response: Response
-        try {
-          response = await fetch(healthUrl, {
-            method: 'GET',
-            signal: AbortSignal.timeout(5000),
-          })
-        } catch {
-          response = await fetch(beUrl, {
-            method: 'GET',
-            signal: AbortSignal.timeout(5000),
-          })
-        }
-
-        const latency = Math.round(performance.now() - start)
-        metrics['backend_latency'] = { value: latency }
-
-        if (!response.ok && response.status >= 500) {
+      if (health) {
+        // Backend is healthy, check for degraded status
+        if (health.status === 'unhealthy') {
           addAlert({
             type: 'backend_down',
             severity: 'critical',
-            message: `Backend service returned HTTP ${response.status}`,
-            details: `URL: ${beUrl.replace(/\/\/[^:]+:[^@]+@/, '//***:***@')}`,
+            message: `Backend service is unhealthy`,
+            details: `Status: ${health.status}`,
           })
-        } else if (latency > 2000) {
+        } else if (health.status === 'degraded') {
           addAlert({
             type: 'backend_slow',
             severity: 'warning',
-            message: `Backend service responding slowly (${latency}ms)`,
+            message: `Backend service is degraded`,
+            details: `Status: ${health.status}`,
           })
         }
-      } catch (e: any) {
+        metrics['backend_latency'] = { value: 0 } // We got a response
+      } else {
+        // Backend health check failed
         addAlert({
           type: 'backend_down',
           severity: 'critical',
-          message: `Backend service unreachable: ${e.name === 'TimeoutError' ? 'Timeout' : e.message}`,
+          message: `Backend service unreachable`,
         })
       }
     }
@@ -399,12 +356,10 @@ async function checkAlerts() {
       } else if (rule.type === 'rpc_latency' && rule.chain) {
         metricData = metrics[`rpc_latency_${rule.chain}`]
       } else if (rule.type === 'db_connections') {
-        // Use highest connection usage across DBs
         const feConn = metrics['db_connections_Frontend DB']?.value || 0
         const beConn = metrics['db_connections_Backend DB']?.value || 0
         metricData = { value: Math.max(feConn, beConn) }
       } else if (rule.type === 'db_cache') {
-        // Use lowest cache hit ratio across DBs
         const feCache = metrics['db_cache_Frontend DB']?.value || 100
         const beCache = metrics['db_cache_Backend DB']?.value || 100
         metricData = { value: Math.min(feCache, beCache) }
@@ -422,7 +377,6 @@ async function checkAlerts() {
           details: `Custom rule triggered`,
         })
 
-        // Update last triggered
         await sql`
           UPDATE alert_rules SET last_triggered_at = now() WHERE id = ${rule.id}
         `.catch(() => {})
@@ -436,10 +390,8 @@ async function checkAlerts() {
 }
 
 export async function GET() {
-  // Check for new alerts
   await checkAlerts()
 
-  // Return current alerts
   const unacknowledgedCount = alerts.filter(a => !a.acknowledged).length
 
   return NextResponse.json({

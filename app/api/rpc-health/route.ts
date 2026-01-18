@@ -1,9 +1,8 @@
 import { beSql } from '@/lib/db'
+import { getStatus } from '@/lib/backend-api'
 import { NextResponse } from 'next/server'
 
 export const dynamic = 'force-dynamic'
-
-// Config table now lives in backend database (be.config)
 
 async function checkRpcHealth(url: string): Promise<{ latency: number; blockNumber: string | null; error: string | null }> {
   const start = Date.now()
@@ -15,10 +14,10 @@ async function checkRpcHealth(url: string): Promise<{ latency: number; blockNumb
         jsonrpc: '2.0',
         method: 'eth_blockNumber',
         params: [],
-        id: Date.now(), // Unique ID to prevent caching
+        id: Date.now(),
       }),
       cache: 'no-store',
-      signal: AbortSignal.timeout(10000), // 10 second timeout
+      signal: AbortSignal.timeout(10000),
     })
 
     const latency = Date.now() - start
@@ -47,26 +46,50 @@ async function checkRpcHealth(url: string): Promise<{ latency: number; blockNumb
 }
 
 export async function GET() {
-  // Get enabled networks from backend config
-  const networks = await beSql`
-    SELECT chain, name, url
-    FROM config
-    WHERE enabled = true
-    ORDER BY chain
-  `
+  try {
+    // Try to get chain info from backend API, with config as fallback for URLs
+    const [status, networks] = await Promise.all([
+      getStatus().catch(() => null),
+      // Keep config query for RPC URLs (not in backend /status response)
+      beSql`
+        SELECT chain, name, url
+        FROM config
+        WHERE enabled = true
+        ORDER BY chain
+      `,
+    ])
 
-  // Check health for each RPC
-  const results = await Promise.all(
-    networks.map(async (n) => {
-      const health = await checkRpcHealth(n.url)
-      return {
-        chain: n.chain,
-        name: n.name,
-        url: n.url.replace(/\/[^/]*$/, '/***'), // Hide API key in URL
-        ...health,
+    // Build a map of chain info from backend status if available
+    const backendChains = new Map<number, { running: boolean; current: string; target: string }>()
+    if (status?.chains) {
+      for (const chain of status.chains) {
+        backendChains.set(parseInt(chain.chain, 10), {
+          running: chain.running,
+          current: chain.current,
+          target: chain.target,
+        })
       }
-    })
-  )
+    }
 
-  return NextResponse.json(results)
+    // Check health for each RPC
+    const results = await Promise.all(
+      networks.map(async (n) => {
+        const health = await checkRpcHealth(n.url)
+        const backendInfo = backendChains.get(n.chain)
+
+        return {
+          chain: n.chain,
+          name: n.name,
+          url: n.url.replace(/\/[^/]*$/, '/***'), // Hide API key in URL
+          running: backendInfo?.running ?? true,
+          ...health,
+        }
+      })
+    )
+
+    return NextResponse.json(results)
+  } catch (e: any) {
+    console.error('Error checking RPC health:', e)
+    return NextResponse.json({ error: e.message }, { status: 500 })
+  }
 }

@@ -1,6 +1,34 @@
 'use client'
 
-import { useAdmin } from '@/components/AdminContext'
+import { memo } from 'react'
+import {
+  Database,
+  Server,
+  RefreshCw,
+  AlertTriangle,
+  CheckCircle,
+  XCircle,
+  Activity,
+  Clock,
+} from 'lucide-react'
+import { MonitoringData, RpcHealth, Alert, SystemHealth, SyncHistory } from '@/types'
+import {
+  Button,
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  Badge,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+  ScrollArea,
+} from '@/components/ui'
+import { LogsViewer } from '@/components/LogsViewer'
+import { cn } from '@/lib/utils'
 
 function formatUptime(seconds: number): string {
   const days = Math.floor(seconds / 86400)
@@ -11,10 +39,6 @@ function formatUptime(seconds: number): string {
   if (hours > 0) return `${hours}h ${minutes}m`
   return `${minutes}m`
 }
-import { MonitoringData, RpcHealth, Alert, SystemHealth, SyncHistory } from '@/types'
-import { Button } from '@/components/ui/Button'
-import { Card } from '@/components/ui/Card'
-import { Badge } from '@/components/ui/Badge'
 
 interface SystemTabProps {
   monitoringData: MonitoringData | null
@@ -33,7 +57,7 @@ interface SystemTabProps {
   fetchSyncHistory: () => void
 }
 
-export function SystemTab({
+export const SystemTab = memo(function SystemTab({
   monitoringData,
   fetchMonitoring,
   rpcHealth,
@@ -49,690 +73,633 @@ export function SystemTab({
   syncHistory,
   fetchSyncHistory,
 }: SystemTabProps) {
-  const { colors, styles } = useAdmin()
-
   return (
-    <>
+    <div className="space-y-6">
       {/* Database Size */}
-      <Card colors={colors} darkMode={false}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
-          <h3 style={{ margin: 0 }}>Database Size</h3>
-          <Button onClick={fetchMonitoring}>Refresh</Button>
-        </div>
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle className="flex items-center gap-2">
+            <Database className="h-5 w-5" />
+            Database Size
+          </CardTitle>
+          <Button onClick={fetchMonitoring} size="sm">
+            <RefreshCw className="h-4 w-4 mr-1" />
+            Refresh
+          </Button>
+        </CardHeader>
+        <CardContent>
+          {monitoringData?.dbSize && (
+            <div className="mb-6 p-4 bg-secondary rounded-lg flex items-center gap-4">
+              <span className="font-medium">Total Database Size:</span>
+              <span className="text-2xl font-bold text-gold">
+                {monitoringData.dbSize.size}
+              </span>
+            </div>
+          )}
 
-        {monitoringData?.dbSize && (
-          <div style={{ marginBottom: '20px', padding: '15px', background: colors.statBg, borderRadius: '4px' }}>
-            <strong>Total Database Size:</strong>{' '}
-            <span style={{ fontSize: '24px', fontWeight: 'bold', color: colors.primary }}>
-              {monitoringData.dbSize.size}
-            </span>
-          </div>
-        )}
-
-        {monitoringData?.tableSizes && monitoringData.tableSizes.length > 0 ? (
-          <table style={styles.table}>
-            <thead>
-              <tr>
-                <th style={styles.th}>Table</th>
-                <th style={styles.th}>Size</th>
-                <th style={styles.th}>% of Total</th>
-              </tr>
-            </thead>
-            <tbody>
-              {monitoringData.tableSizes.map(t => (
-                <tr key={t.tablename}>
-                  <td style={styles.td}><code>{t.tablename}</code></td>
-                  <td style={styles.td}>{t.size}</td>
-                  <td style={styles.td}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                      <div style={{ width: '100px', height: '10px', background: colors.borderLight, borderRadius: '5px' }}>
-                        <div
-                          style={{
-                            width: `${Math.min(100, (t.size_bytes / (monitoringData.dbSize?.size_bytes || 1)) * 100)}%`,
-                            height: '100%',
-                            background: colors.primary,
-                            borderRadius: '5px',
-                          }}
-                        />
+          {monitoringData?.tableSizes && monitoringData.tableSizes.length > 0 ? (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Table</TableHead>
+                  <TableHead>Size</TableHead>
+                  <TableHead>% of Total</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {monitoringData.tableSizes.map(t => (
+                  <TableRow key={t.tablename}>
+                    <TableCell><code className="text-xs">{t.tablename}</code></TableCell>
+                    <TableCell>{t.size}</TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-3">
+                        <div className="w-24 h-2 bg-border rounded-full">
+                          <div
+                            className="h-full bg-gold rounded-full"
+                            style={{
+                              width: `${Math.min(100, (t.size_bytes / (monitoringData.dbSize?.size_bytes || 1)) * 100)}%`,
+                            }}
+                          />
+                        </div>
+                        <span className="text-sm">
+                          {((t.size_bytes / (monitoringData.dbSize?.size_bytes || 1)) * 100).toFixed(1)}%
+                        </span>
                       </div>
-                      <span>{((t.size_bytes / (monitoringData.dbSize?.size_bytes || 1)) * 100).toFixed(1)}%</span>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        ) : (
-          <p style={{ color: colors.textMuted }}>No table data available</p>
-        )}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          ) : (
+            <p className="text-muted-foreground">No table data available</p>
+          )}
+        </CardContent>
       </Card>
 
       {/* RPC Health */}
-      <Card colors={colors} darkMode={false}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
-          <h3 style={{ margin: 0 }}>RPC Health Check</h3>
-          <Button onClick={checkRpcHealth} disabled={rpcLoading}>
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle className="flex items-center gap-2">
+            <Server className="h-5 w-5" />
+            RPC Health Check
+          </CardTitle>
+          <Button onClick={checkRpcHealth} disabled={rpcLoading} size="sm">
+            <RefreshCw className={cn("h-4 w-4 mr-1", rpcLoading && "animate-spin")} />
             {rpcLoading ? 'Checking...' : 'Check Health'}
           </Button>
-        </div>
-
-        {rpcHealth.length > 0 ? (
-          <table style={styles.table}>
-            <thead>
-              <tr>
-                <th style={styles.th}>Chain</th>
-                <th style={styles.th}>Name</th>
-                <th style={styles.th}>Latency</th>
-                <th style={styles.th}>Block Number</th>
-                <th style={styles.th}>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rpcHealth.map(r => (
-                <tr key={r.chain}>
-                  <td style={styles.td}>{r.chain}</td>
-                  <td style={styles.td}>{r.name}</td>
-                  <td style={styles.td}>
-                    <span style={{
-                      color: r.latency < 500 ? '#28a745' : r.latency < 1000 ? '#ffc107' : '#dc3545',
-                      fontWeight: 'bold'
-                    }}>
-                      {r.latency}ms
-                    </span>
-                  </td>
-                  <td style={styles.td}>
-                    {r.blockNumber ? Number(r.blockNumber).toLocaleString() : '-'}
-                  </td>
-                  <td style={styles.td}>
-                    {r.error ? (
-                      <Badge variant="danger" title={r.error}>Error</Badge>
-                    ) : (
-                      <Badge variant="success">Healthy</Badge>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        ) : (
-          <p style={{ color: colors.textMuted }}>Click "Check Health" to test RPC endpoints</p>
-        )}
+        </CardHeader>
+        <CardContent>
+          {rpcHealth.length > 0 ? (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Chain</TableHead>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Latency</TableHead>
+                  <TableHead>Block Number</TableHead>
+                  <TableHead>Status</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {rpcHealth.map(r => (
+                  <TableRow key={r.chain}>
+                    <TableCell className="font-mono">{r.chain}</TableCell>
+                    <TableCell>{r.name}</TableCell>
+                    <TableCell>
+                      <span className={cn(
+                        "font-bold",
+                        r.latency < 500 ? "text-green-500" : r.latency < 1000 ? "text-yellow-500" : "text-red-500"
+                      )}>
+                        {r.latency}ms
+                      </span>
+                    </TableCell>
+                    <TableCell className="font-mono">
+                      {r.blockNumber ? Number(r.blockNumber).toLocaleString() : '-'}
+                    </TableCell>
+                    <TableCell>
+                      {r.error ? (
+                        <Badge variant="error" title={r.error}>Error</Badge>
+                      ) : (
+                        <Badge variant="success">Healthy</Badge>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          ) : (
+            <p className="text-muted-foreground">Click "Check Health" to test RPC endpoints</p>
+          )}
+        </CardContent>
       </Card>
 
-      {/* API Usage per User */}
-      <Card colors={colors} darkMode={false} title="API Usage (Last 30 Days)">
-        {monitoringData?.userUsage && monitoringData.userUsage.length > 0 ? (
-          <table style={styles.table}>
-            <thead>
-              <tr>
-                <th style={styles.th}>User</th>
-                <th style={styles.th}>Total Queries</th>
-                <th style={styles.th}>Avg Duration</th>
-                <th style={styles.th}>Errors</th>
-                <th style={styles.th}>Last Query</th>
-              </tr>
-            </thead>
-            <tbody>
-              {monitoringData.userUsage.map(u => (
-                <tr key={u.email}>
-                  <td style={styles.td}>{u.email}</td>
-                  <td style={styles.td}>
-                    <strong>{u.total_queries.toLocaleString()}</strong>
-                  </td>
-                  <td style={styles.td}>
-                    <span style={{ color: u.avg_duration_ms < 100 ? '#28a745' : u.avg_duration_ms < 500 ? '#ffc107' : '#dc3545' }}>
-                      {u.avg_duration_ms}ms
-                    </span>
-                  </td>
-                  <td style={styles.td}>
-                    {u.error_count > 0 ? (
-                      <span style={{ color: '#dc3545' }}>{u.error_count}</span>
-                    ) : (
-                      <span style={{ color: '#28a745' }}>0</span>
-                    )}
-                  </td>
-                  <td style={styles.td}>
-                    {u.last_query ? new Date(u.last_query).toLocaleString() : '-'}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        ) : (
-          <p style={{ color: colors.textMuted }}>No usage data available (query_log table may not exist)</p>
-        )}
+      {/* API Usage */}
+      <Card>
+        <CardHeader>
+          <CardTitle>API Usage (Last 30 Days)</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {monitoringData?.userUsage && monitoringData.userUsage.length > 0 ? (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>User</TableHead>
+                  <TableHead>Total Queries</TableHead>
+                  <TableHead>Avg Duration</TableHead>
+                  <TableHead>Errors</TableHead>
+                  <TableHead>Last Query</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {monitoringData.userUsage.map(u => (
+                  <TableRow key={u.email}>
+                    <TableCell>{u.email}</TableCell>
+                    <TableCell className="font-bold">{u.total_queries.toLocaleString()}</TableCell>
+                    <TableCell>
+                      <span className={cn(
+                        u.avg_duration_ms < 100 ? "text-green-500" : u.avg_duration_ms < 500 ? "text-yellow-500" : "text-red-500"
+                      )}>
+                        {u.avg_duration_ms}ms
+                      </span>
+                    </TableCell>
+                    <TableCell>
+                      <span className={u.error_count > 0 ? "text-red-500" : "text-green-500"}>
+                        {u.error_count}
+                      </span>
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {u.last_query ? new Date(u.last_query).toLocaleString() : '-'}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          ) : (
+            <p className="text-muted-foreground">No usage data available</p>
+          )}
+        </CardContent>
       </Card>
 
-      {/* Query History */}
-      <Card colors={colors} darkMode={false} title="Recent Queries">
-        {monitoringData?.queryHistory && monitoringData.queryHistory.length > 0 ? (
-          <table style={styles.table}>
-            <thead>
-              <tr>
-                <th style={styles.th}>Time</th>
-                <th style={styles.th}>Chain</th>
-                <th style={styles.th}>Query</th>
-                <th style={styles.th}>Duration</th>
-                <th style={styles.th}>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {monitoringData.queryHistory.slice(0, 20).map((q, i) => (
-                <tr key={i}>
-                  <td style={styles.td}>{new Date(q.created_at).toLocaleString()}</td>
-                  <td style={styles.td}>{q.chain}</td>
-                  <td style={styles.td}>
-                    <code style={{ fontSize: '11px' }} title={q.query}>
-                      {q.query.length > 50 ? q.query.substring(0, 50) + '...' : q.query}
-                    </code>
-                  </td>
-                  <td style={styles.td}>
-                    <span style={{ color: q.duration_ms < 100 ? '#28a745' : q.duration_ms < 500 ? '#ffc107' : '#dc3545' }}>
-                      {q.duration_ms}ms
-                    </span>
-                  </td>
-                  <td style={styles.td}>
-                    {q.error ? (
-                      <Badge variant="danger" title={q.error}>Error</Badge>
-                    ) : (
-                      <Badge variant="success">OK</Badge>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        ) : (
-          <p style={{ color: colors.textMuted }}>No query history available (query_log table may not exist)</p>
-        )}
-      </Card>
-
-      {/* Alerts Panel */}
-      <Card
-        colors={colors}
-        darkMode={false}
-        style={{
-          borderLeft: alerts.some(a => !a.acknowledged && a.severity === 'critical') ? '4px solid #dc3545' : alerts.some(a => !a.acknowledged) ? '4px solid #ffc107' : '4px solid #28a745'
-        }}
-      >
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
-          <h3 style={{ margin: 0 }}>
+      {/* Alerts */}
+      <Card className={cn(
+        "border-l-4",
+        alerts.some(a => !a.acknowledged && a.severity === 'critical') ? "border-l-red-500" :
+        alerts.some(a => !a.acknowledged) ? "border-l-yellow-500" : "border-l-green-500"
+      )}>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle className="flex items-center gap-2">
+            <AlertTriangle className="h-5 w-5" />
             Alerts
             {unacknowledgedAlerts > 0 && (
-              <span style={{ marginLeft: '10px', background: '#dc3545', color: '#fff', borderRadius: '10px', padding: '2px 8px', fontSize: '12px' }}>
-                {unacknowledgedAlerts} new
-              </span>
+              <Badge variant="error">{unacknowledgedAlerts} new</Badge>
             )}
-          </h3>
-          <div style={{ display: 'flex', gap: '10px' }}>
-            <Button onClick={fetchAlerts}>Refresh</Button>
+          </CardTitle>
+          <div className="flex gap-2">
+            <Button onClick={fetchAlerts} size="sm">
+              <RefreshCw className="h-4 w-4 mr-1" />
+              Refresh
+            </Button>
             {unacknowledgedAlerts > 0 && (
-              <Button variant="secondary" onClick={acknowledgeAllAlerts}>Acknowledge All</Button>
+              <Button variant="secondary" onClick={acknowledgeAllAlerts} size="sm">
+                Acknowledge All
+              </Button>
             )}
           </div>
-        </div>
-
-        {alerts.length > 0 ? (
-          <div style={{ maxHeight: '300px', overflowY: 'auto' }}>
-            {alerts.slice(0, 20).map(alert => (
-              <div
-                key={alert.id}
-                style={{
-                  padding: '12px',
-                  marginBottom: '8px',
-                  background: alert.acknowledged ? colors.cardBg : alert.severity === 'critical' ? '#f8d7da' : alert.severity === 'warning' ? '#fff3cd' : '#d1ecf1',
-                  borderRadius: '4px',
-                  borderLeft: `4px solid ${alert.severity === 'critical' ? '#dc3545' : alert.severity === 'warning' ? '#ffc107' : '#17a2b8'}`,
-                  opacity: alert.acknowledged ? 0.6 : 1,
-                }}
-              >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                  <div>
-                    <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>
-                      <span style={{
-                        display: 'inline-block',
-                        padding: '2px 6px',
-                        borderRadius: '3px',
-                        fontSize: '10px',
-                        marginRight: '8px',
-                        background: alert.severity === 'critical' ? '#dc3545' : alert.severity === 'warning' ? '#ffc107' : '#17a2b8',
-                        color: alert.severity === 'warning' ? '#000' : '#fff',
-                      }}>
-                        {alert.severity.toUpperCase()}
-                      </span>
-                      {alert.chainName && <span style={{ color: colors.textMuted, marginRight: '8px' }}>[{alert.chainName}]</span>}
-                      {alert.message}
-                    </div>
-                    {alert.details && <div style={{ fontSize: '12px', color: colors.textMuted }}>{alert.details}</div>}
-                    <div style={{ fontSize: '11px', color: colors.textMuted, marginTop: '4px' }}>
-                      {new Date(alert.timestamp).toLocaleString()}
+        </CardHeader>
+        <CardContent>
+          {alerts.length > 0 ? (
+            <ScrollArea className="h-[300px]">
+              <div className="space-y-2">
+                {alerts.slice(0, 20).map(alert => (
+                  <div
+                    key={alert.id}
+                    className={cn(
+                      "p-3 rounded-lg border-l-4",
+                      alert.acknowledged ? "opacity-60 bg-secondary" :
+                      alert.severity === 'critical' ? "bg-red-500/10 border-l-red-500" :
+                      alert.severity === 'warning' ? "bg-yellow-500/10 border-l-yellow-500" :
+                      "bg-blue-500/10 border-l-blue-500"
+                    )}
+                  >
+                    <div className="flex justify-between items-start gap-4">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <Badge
+                            variant={alert.severity === 'critical' ? 'error' : alert.severity === 'warning' ? 'warning' : 'info'}
+                            className="text-[10px]"
+                          >
+                            {alert.severity.toUpperCase()}
+                          </Badge>
+                          {alert.chainName && (
+                            <span className="text-muted-foreground text-xs">[{alert.chainName}]</span>
+                          )}
+                          <span className="font-medium">{alert.message}</span>
+                        </div>
+                        {alert.details && (
+                          <p className="text-xs text-muted-foreground">{alert.details}</p>
+                        )}
+                        <p className="text-xs text-muted-foreground">
+                          {new Date(alert.timestamp).toLocaleString()}
+                        </p>
+                      </div>
+                      {!alert.acknowledged && (
+                        <Button size="sm" variant="secondary" onClick={() => acknowledgeAlert(alert.id)}>
+                          Dismiss
+                        </Button>
+                      )}
                     </div>
                   </div>
-                  {!alert.acknowledged && (
-                    <Button size="sm" onClick={() => acknowledgeAlert(alert.id)}>Dismiss</Button>
-                  )}
-                </div>
+                ))}
               </div>
-            ))}
-          </div>
-        ) : (
-          <p style={{ color: '#28a745', textAlign: 'center', padding: '20px' }}>
-            No alerts - all systems operational
-          </p>
-        )}
+            </ScrollArea>
+          ) : (
+            <div className="text-center py-8 text-green-500 flex flex-col items-center gap-2">
+              <CheckCircle className="h-8 w-8" />
+              <p>No alerts - all systems operational</p>
+            </div>
+          )}
+        </CardContent>
       </Card>
 
-      {/* System Health - Database & Backend */}
-      <Card colors={colors} darkMode={false}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
-          <h3 style={{ margin: 0 }}>Infrastructure Health</h3>
-          <Button onClick={fetchSystemHealth}>Refresh</Button>
-        </div>
-
-        {systemHealth ? (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-            {/* Backend Service */}
-            <div style={{ padding: '15px', background: colors.statBg, borderRadius: '8px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                <div style={{ fontSize: '14px', fontWeight: 'bold' }}>Backend Service</div>
-                <div style={{
-                  padding: '4px 12px',
-                  borderRadius: '12px',
-                  fontSize: '12px',
-                  fontWeight: 'bold',
-                  background: systemHealth.backend_service.status === 'healthy' ? '#28a745' : systemHealth.backend_service.status === 'degraded' ? '#ffc107' : systemHealth.backend_service.status === 'unhealthy' ? '#dc3545' : '#6c757d',
-                  color: systemHealth.backend_service.status === 'degraded' ? '#000' : '#fff'
-                }}>
-                  {systemHealth.backend_service.status.toUpperCase()}
+      {/* Infrastructure Health */}
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle className="flex items-center gap-2">
+            <Activity className="h-5 w-5" />
+            Infrastructure Health
+          </CardTitle>
+          <Button onClick={fetchSystemHealth} size="sm">
+            <RefreshCw className="h-4 w-4 mr-1" />
+            Refresh
+          </Button>
+        </CardHeader>
+        <CardContent>
+          {systemHealth ? (
+            <div className="space-y-6">
+              {/* Backend Service */}
+              <div className="p-4 bg-secondary rounded-lg">
+                <div className="flex justify-between items-center mb-4">
+                  <span className="font-semibold">Backend Service</span>
+                  <Badge
+                    variant={
+                      systemHealth.backend_service.status === 'healthy' ? 'success' :
+                      systemHealth.backend_service.status === 'degraded' ? 'warning' : 'error'
+                    }
+                  >
+                    {systemHealth.backend_service.status.toUpperCase()}
+                  </Badge>
                 </div>
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '15px' }}>
-                <div>
-                  <div style={{ fontSize: '11px', color: colors.textMuted }}>Latency</div>
-                  <div style={{ fontSize: '20px', fontWeight: 'bold', color: systemHealth.backend_service.latencyMs && systemHealth.backend_service.latencyMs > 1000 ? '#ffc107' : colors.text }}>
-                    {systemHealth.backend_service.latencyMs !== null ? `${systemHealth.backend_service.latencyMs}ms` : 'N/A'}
-                  </div>
-                </div>
-                <div>
-                  <div style={{ fontSize: '11px', color: colors.textMuted }}>URL</div>
-                  <div style={{ fontSize: '12px', color: colors.text, wordBreak: 'break-all' }}>{systemHealth.backend_service.url}</div>
-                </div>
-                {systemHealth.backend_service.error && (
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                   <div>
-                    <div style={{ fontSize: '11px', color: colors.textMuted }}>Error</div>
-                    <div style={{ fontSize: '12px', color: '#dc3545' }}>{systemHealth.backend_service.error}</div>
+                    <div className="text-xs text-muted-foreground">Latency</div>
+                    <div className={cn(
+                      "text-xl font-bold",
+                      systemHealth.backend_service.latencyMs && systemHealth.backend_service.latencyMs > 1000 ? "text-yellow-500" : ""
+                    )}>
+                      {systemHealth.backend_service.latencyMs !== null ? `${systemHealth.backend_service.latencyMs}ms` : 'N/A'}
+                    </div>
+                  </div>
+                  {systemHealth.backend_service.detailed?.version && (
+                    <div>
+                      <div className="text-xs text-muted-foreground">Version</div>
+                      <div className="text-lg font-bold">{systemHealth.backend_service.detailed.version}</div>
+                    </div>
+                  )}
+                  {systemHealth.backend_service.detailed?.uptime_seconds !== undefined && (
+                    <div>
+                      <div className="text-xs text-muted-foreground">Uptime</div>
+                      <div className="text-lg font-bold">
+                        {formatUptime(systemHealth.backend_service.detailed.uptime_seconds)}
+                      </div>
+                    </div>
+                  )}
+                  {systemHealth.backend_service.detailed?.checks?.database && (
+                    <div>
+                      <div className="text-xs text-muted-foreground">DB Latency</div>
+                      <div className={cn(
+                        "text-lg font-bold",
+                        systemHealth.backend_service.detailed.checks.database.latency_ms > 100 ? "text-yellow-500" : ""
+                      )}>
+                        {systemHealth.backend_service.detailed.checks.database.latency_ms}ms
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Database Pools */}
+                {systemHealth.backend_service.detailed?.checks?.database?.pools && (
+                  <div className="mt-4 pt-4 border-t border-border">
+                    <div className="text-xs font-semibold mb-2">Database Pools</div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                      {Object.entries(systemHealth.backend_service.detailed.checks.database.pools).map(([poolName, pool]) => (
+                        <div key={poolName} className="p-3 bg-card rounded-lg border border-border">
+                          <div className="flex justify-between items-center mb-2">
+                            <span className="font-bold text-xs uppercase">{poolName}</span>
+                            <Badge variant={pool.connected ? 'success' : 'error'} className="text-[10px]">
+                              {pool.connected ? 'CONNECTED' : 'DOWN'}
+                            </Badge>
+                          </div>
+                          <div className="grid grid-cols-2 gap-2 text-xs">
+                            <div>Active: <strong>{pool.active}</strong></div>
+                            <div>Idle: <strong>{pool.idle}</strong></div>
+                            <div>Waiting: <strong className={pool.waiting > 0 ? "text-yellow-500" : ""}>{pool.waiting}</strong></div>
+                            <div>Max: <strong>{pool.max_connections}</strong></div>
+                          </div>
+                          <div className="h-1 bg-border rounded-full mt-2">
+                            <div
+                              className={cn(
+                                "h-full rounded-full",
+                                ((pool.active + pool.idle) / pool.max_connections) > 0.8 ? "bg-red-500" : "bg-green-500"
+                              )}
+                              style={{ width: `${Math.min(100, ((pool.active + pool.idle) / pool.max_connections) * 100)}%` }}
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Chain Sync Status */}
+                {systemHealth.backend_service.detailed?.checks?.sync?.chains && (
+                  <div className="mt-4 pt-4 border-t border-border">
+                    <div className="text-xs font-semibold mb-2">Chain Sync Status</div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                      {systemHealth.backend_service.detailed.checks.sync.chains.map((chain) => (
+                        <div key={chain.chain_id} className="p-3 bg-card rounded-lg border border-border">
+                          <div className="flex justify-between items-center mb-2">
+                            <span className="font-bold text-sm">{chain.chain_name || `Chain ${chain.chain_id}`}</span>
+                            <Badge
+                              variant={
+                                chain.status === 'synced' ? 'success' :
+                                chain.status === 'syncing' ? 'warning' :
+                                chain.status === 'disabled' ? 'secondary' : 'error'
+                              }
+                              className="text-[10px]"
+                            >
+                              {chain.status.toUpperCase()}
+                            </Badge>
+                          </div>
+                          <div className="text-xs text-muted-foreground mb-1">
+                            Synced: <strong>{Number(chain.synced_block).toLocaleString()}</strong>
+                            {' / '}Head: <strong>{Number(chain.head_block).toLocaleString()}</strong>
+                          </div>
+                          <div className="flex justify-between text-xs mb-2">
+                            <span className={cn(
+                              chain.blocks_behind > 1000 ? "text-red-500" :
+                              chain.blocks_behind > 100 ? "text-yellow-500" : "text-green-500"
+                            )}>
+                              Behind: {chain.blocks_behind.toLocaleString()}
+                            </span>
+                            <span className={cn(
+                              chain.sync_percentage >= 99 ? "text-green-500" :
+                              chain.sync_percentage >= 90 ? "text-yellow-500" : "text-red-500"
+                            )}>
+                              {chain.sync_percentage.toFixed(1)}%
+                            </span>
+                          </div>
+                          <div className="h-1 bg-border rounded-full">
+                            <div
+                              className={cn(
+                                "h-full rounded-full transition-all",
+                                chain.sync_percentage >= 99 ? "bg-green-500" :
+                                chain.sync_percentage >= 90 ? "bg-yellow-500" : "bg-gold"
+                              )}
+                              style={{ width: `${chain.sync_percentage}%` }}
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 )}
               </div>
 
-              {/* Detailed Backend Metrics */}
-              {systemHealth.backend_service.detailed && (
-                <>
-                  {/* Version & Uptime */}
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '12px', marginTop: '15px', paddingTop: '15px', borderTop: `1px solid ${colors.border}` }}>
-                    {systemHealth.backend_service.detailed.version && (
+              {/* Database Stats */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {systemHealth.frontend_db && (
+                  <div className="p-4 bg-secondary rounded-lg">
+                    <h4 className="font-semibold mb-3">{systemHealth.frontend_db.database}</h4>
+                    <div className="grid grid-cols-2 gap-3 text-sm">
                       <div>
-                        <div style={{ fontSize: '11px', color: colors.textMuted }}>Version</div>
-                        <div style={{ fontSize: '16px', fontWeight: 'bold' }}>
-                          {systemHealth.backend_service.detailed.version}
+                        <div className="text-xs text-muted-foreground">Connections</div>
+                        <div className={cn(
+                          "text-xl font-bold",
+                          systemHealth.frontend_db.connections.usagePercent > 80 ? "text-red-500" : ""
+                        )}>
+                          {systemHealth.frontend_db.connections.active + systemHealth.frontend_db.connections.idle}/{systemHealth.frontend_db.connections.max}
                         </div>
-                      </div>
-                    )}
-                    {systemHealth.backend_service.detailed.uptime_seconds !== undefined && (
-                      <div>
-                        <div style={{ fontSize: '11px', color: colors.textMuted }}>Uptime</div>
-                        <div style={{ fontSize: '16px', fontWeight: 'bold' }}>
-                          {formatUptime(systemHealth.backend_service.detailed.uptime_seconds)}
-                        </div>
-                      </div>
-                    )}
-                    {systemHealth.backend_service.detailed.checks?.database && (
-                      <>
-                        <div>
-                          <div style={{ fontSize: '11px', color: colors.textMuted }}>DB Status</div>
-                          <div style={{ fontSize: '16px', fontWeight: 'bold', color: systemHealth.backend_service.detailed.checks.database.status === 'ok' ? '#28a745' : '#dc3545' }}>
-                            {systemHealth.backend_service.detailed.checks.database.status.toUpperCase()}
-                          </div>
-                        </div>
-                        <div>
-                          <div style={{ fontSize: '11px', color: colors.textMuted }}>DB Latency</div>
-                          <div style={{ fontSize: '16px', fontWeight: 'bold', color: systemHealth.backend_service.detailed.checks.database.latency_ms > 100 ? '#ffc107' : colors.text }}>
-                            {systemHealth.backend_service.detailed.checks.database.latency_ms}ms
-                          </div>
-                        </div>
-                      </>
-                    )}
-                    {systemHealth.backend_service.detailed.checks?.sync && (
-                      <div>
-                        <div style={{ fontSize: '11px', color: colors.textMuted }}>Sync Status</div>
-                        <div style={{ fontSize: '16px', fontWeight: 'bold', color: systemHealth.backend_service.detailed.checks.sync.status === 'synced' ? '#28a745' : systemHealth.backend_service.detailed.checks.sync.status === 'syncing' ? '#ffc107' : '#dc3545' }}>
-                          {systemHealth.backend_service.detailed.checks.sync.status.toUpperCase()}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Database Pools */}
-                  {systemHealth.backend_service.detailed.checks?.database?.pools && Object.keys(systemHealth.backend_service.detailed.checks.database.pools).length > 0 && (
-                    <div style={{ marginTop: '15px', paddingTop: '15px', borderTop: `1px solid ${colors.border}` }}>
-                      <div style={{ fontSize: '12px', fontWeight: 'bold', marginBottom: '10px' }}>Database Pools</div>
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '10px' }}>
-                        {Object.entries(systemHealth.backend_service.detailed.checks.database.pools).map(([poolName, pool]) => (
-                          <div key={poolName} style={{ padding: '10px', background: colors.cardBg, borderRadius: '6px', border: `1px solid ${colors.border}` }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                              <span style={{ fontWeight: 'bold', fontSize: '13px', textTransform: 'uppercase' }}>{poolName}</span>
-                              <span style={{
-                                padding: '2px 8px',
-                                borderRadius: '10px',
-                                fontSize: '10px',
-                                fontWeight: 'bold',
-                                background: pool.connected ? '#28a745' : '#dc3545',
-                                color: '#fff'
-                              }}>
-                                {pool.connected ? 'CONNECTED' : 'DISCONNECTED'}
-                              </span>
-                            </div>
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: '12px' }}>
-                              <div>
-                                <span style={{ color: colors.textMuted }}>Active: </span>
-                                <strong>{pool.active}</strong>
-                              </div>
-                              <div>
-                                <span style={{ color: colors.textMuted }}>Idle: </span>
-                                <strong>{pool.idle}</strong>
-                              </div>
-                              <div>
-                                <span style={{ color: colors.textMuted }}>Waiting: </span>
-                                <strong style={{ color: pool.waiting > 0 ? '#ffc107' : colors.text }}>{pool.waiting}</strong>
-                              </div>
-                              <div>
-                                <span style={{ color: colors.textMuted }}>Max: </span>
-                                <strong>{pool.max_connections}</strong>
-                              </div>
-                            </div>
-                            {/* Pool usage bar */}
-                            <div style={{ height: '4px', background: colors.borderLight, borderRadius: '2px', marginTop: '8px' }}>
-                              <div style={{
-                                width: `${Math.min(100, ((pool.active + pool.idle) / pool.max_connections) * 100)}%`,
-                                height: '100%',
-                                background: ((pool.active + pool.idle) / pool.max_connections) > 0.8 ? '#dc3545' : '#28a745',
-                                borderRadius: '2px',
-                              }} />
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Chain Sync Status */}
-                  {systemHealth.backend_service.detailed.checks?.sync?.chains && systemHealth.backend_service.detailed.checks.sync.chains.length > 0 && (
-                    <div style={{ marginTop: '15px', paddingTop: '15px', borderTop: `1px solid ${colors.border}` }}>
-                      <div style={{ fontSize: '12px', fontWeight: 'bold', marginBottom: '10px' }}>Chain Sync Status</div>
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '10px' }}>
-                        {systemHealth.backend_service.detailed.checks.sync.chains.map((chain) => (
-                          <div key={chain.chain_id} style={{ padding: '10px', background: colors.cardBg, borderRadius: '6px', border: `1px solid ${colors.border}` }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                              <span style={{ fontWeight: 'bold', fontSize: '13px' }}>{chain.chain_name || `Chain ${chain.chain_id}`}</span>
-                              <span style={{
-                                padding: '2px 8px',
-                                borderRadius: '10px',
-                                fontSize: '10px',
-                                fontWeight: 'bold',
-                                background: chain.status === 'synced' ? '#28a745' : chain.status === 'syncing' ? '#ffc107' : chain.status === 'disabled' ? '#6c757d' : '#dc3545',
-                                color: chain.status === 'syncing' ? '#000' : '#fff'
-                              }}>
-                                {chain.status.toUpperCase()}
-                              </span>
-                            </div>
-                            <div style={{ fontSize: '12px', color: colors.textMuted, marginBottom: '4px' }}>
-                              <span>Synced: </span>
-                              <strong style={{ color: colors.text }}>{Number(chain.synced_block).toLocaleString()}</strong>
-                              <span> / Head: </span>
-                              <strong style={{ color: colors.text }}>{Number(chain.head_block).toLocaleString()}</strong>
-                            </div>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                              <div>
-                                <span style={{ fontSize: '11px', color: colors.textMuted }}>Behind: </span>
-                                <span style={{ fontSize: '12px', fontWeight: 'bold', color: chain.blocks_behind > 1000 ? '#dc3545' : chain.blocks_behind > 100 ? '#ffc107' : '#28a745' }}>
-                                  {chain.blocks_behind.toLocaleString()} blocks
-                                </span>
-                              </div>
-                              <div>
-                                <span style={{ fontSize: '11px', color: colors.textMuted }}>Synced: </span>
-                                <span style={{ fontSize: '12px', fontWeight: 'bold', color: chain.sync_percentage >= 99 ? '#28a745' : chain.sync_percentage >= 90 ? '#ffc107' : '#dc3545' }}>
-                                  {chain.sync_percentage.toFixed(1)}%
-                                </span>
-                              </div>
-                            </div>
-                            {/* Sync progress bar */}
-                            <div style={{ height: '4px', background: colors.borderLight, borderRadius: '2px', marginTop: '6px' }}>
-                              <div style={{
-                                width: `${chain.sync_percentage}%`,
-                                height: '100%',
-                                background: chain.sync_percentage >= 99 ? '#28a745' : chain.sync_percentage >= 90 ? '#ffc107' : colors.primary,
-                                borderRadius: '2px',
-                                transition: 'width 0.3s ease'
-                              }} />
-                            </div>
-                            {chain.estimated_time_to_sync && chain.status !== 'synced' && (
-                              <div style={{ fontSize: '11px', color: colors.textMuted, marginTop: '4px' }}>
-                                ETA: <strong>{chain.estimated_time_to_sync}</strong>
-                              </div>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
-
-            {/* Databases */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '15px' }}>
-              {/* Frontend DB */}
-              {systemHealth.frontend_db && (
-                <div style={{ padding: '15px', background: colors.statBg, borderRadius: '8px' }}>
-                  <div style={{ fontSize: '14px', fontWeight: 'bold', marginBottom: '12px' }}>{systemHealth.frontend_db.database}</div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                    <div>
-                      <div style={{ fontSize: '11px', color: colors.textMuted }}>Connections</div>
-                      <div style={{ fontSize: '20px', fontWeight: 'bold', color: systemHealth.frontend_db.connections.usagePercent > 80 ? '#dc3545' : colors.text }}>
-                        {systemHealth.frontend_db.connections.active + systemHealth.frontend_db.connections.idle}/{systemHealth.frontend_db.connections.max}
-                      </div>
-                      <div style={{ height: '4px', background: colors.borderLight, borderRadius: '2px', marginTop: '4px' }}>
-                        <div style={{ width: `${systemHealth.frontend_db.connections.usagePercent}%`, height: '100%', background: systemHealth.frontend_db.connections.usagePercent > 80 ? '#dc3545' : '#28a745', borderRadius: '2px' }} />
-                      </div>
-                    </div>
-                    <div>
-                      <div style={{ fontSize: '11px', color: colors.textMuted }}>Cache Hit Ratio</div>
-                      <div style={{ fontSize: '20px', fontWeight: 'bold', color: systemHealth.frontend_db.cacheHitRatio < 90 ? '#ffc107' : '#28a745' }}>
-                        {systemHealth.frontend_db.cacheHitRatio}%
-                      </div>
-                    </div>
-                    <div>
-                      <div style={{ fontSize: '11px', color: colors.textMuted }}>Size</div>
-                      <div style={{ fontSize: '16px', fontWeight: 'bold' }}>{systemHealth.frontend_db.size}</div>
-                    </div>
-                    <div>
-                      <div style={{ fontSize: '11px', color: colors.textMuted }}>Deadlocks</div>
-                      <div style={{ fontSize: '16px', fontWeight: 'bold', color: systemHealth.frontend_db.deadlocks > 0 ? '#dc3545' : colors.text }}>
-                        {systemHealth.frontend_db.deadlocks}
-                      </div>
-                    </div>
-                  </div>
-                  {systemHealth.frontend_db.longRunningQueries.length > 0 && (
-                    <div style={{ marginTop: '12px', padding: '8px', background: '#fff3cd', borderRadius: '4px' }}>
-                      <div style={{ fontSize: '11px', color: '#856404', fontWeight: 'bold' }}>Long-running queries:</div>
-                      {systemHealth.frontend_db.longRunningQueries.map(q => (
-                        <div key={q.pid} style={{ fontSize: '11px', color: '#856404', marginTop: '4px' }}>
-                          PID {q.pid}: {q.duration} - {q.query}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Backend DB */}
-              {systemHealth.backend_db && (
-                <div style={{ padding: '15px', background: colors.statBg, borderRadius: '8px' }}>
-                  <div style={{ fontSize: '14px', fontWeight: 'bold', marginBottom: '12px' }}>{systemHealth.backend_db.database}</div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                    <div>
-                      <div style={{ fontSize: '11px', color: colors.textMuted }}>Connections</div>
-                      <div style={{ fontSize: '20px', fontWeight: 'bold', color: systemHealth.backend_db.connections.usagePercent > 80 ? '#dc3545' : colors.text }}>
-                        {systemHealth.backend_db.connections.active + systemHealth.backend_db.connections.idle}/{systemHealth.backend_db.connections.max}
-                      </div>
-                      <div style={{ height: '4px', background: colors.borderLight, borderRadius: '2px', marginTop: '4px' }}>
-                        <div style={{ width: `${systemHealth.backend_db.connections.usagePercent}%`, height: '100%', background: systemHealth.backend_db.connections.usagePercent > 80 ? '#dc3545' : '#28a745', borderRadius: '2px' }} />
-                      </div>
-                    </div>
-                    <div>
-                      <div style={{ fontSize: '11px', color: colors.textMuted }}>Cache Hit Ratio</div>
-                      <div style={{ fontSize: '20px', fontWeight: 'bold', color: systemHealth.backend_db.cacheHitRatio < 90 ? '#ffc107' : '#28a745' }}>
-                        {systemHealth.backend_db.cacheHitRatio}%
-                      </div>
-                    </div>
-                    <div>
-                      <div style={{ fontSize: '11px', color: colors.textMuted }}>Size</div>
-                      <div style={{ fontSize: '16px', fontWeight: 'bold' }}>{systemHealth.backend_db.size}</div>
-                    </div>
-                    <div>
-                      <div style={{ fontSize: '11px', color: colors.textMuted }}>Deadlocks</div>
-                      <div style={{ fontSize: '16px', fontWeight: 'bold', color: systemHealth.backend_db.deadlocks > 0 ? '#dc3545' : colors.text }}>
-                        {systemHealth.backend_db.deadlocks}
-                      </div>
-                    </div>
-                  </div>
-                  {systemHealth.backend_db.longRunningQueries.length > 0 && (
-                    <div style={{ marginTop: '12px', padding: '8px', background: '#fff3cd', borderRadius: '4px' }}>
-                      <div style={{ fontSize: '11px', color: '#856404', fontWeight: 'bold' }}>Long-running queries:</div>
-                      {systemHealth.backend_db.longRunningQueries.map(q => (
-                        <div key={q.pid} style={{ fontSize: '11px', color: '#856404', marginTop: '4px' }}>
-                          PID {q.pid}: {q.duration} - {q.query}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-
-            <div style={{ fontSize: '11px', color: colors.textMuted, textAlign: 'right' }}>
-              Last updated: {new Date(systemHealth.timestamp).toLocaleTimeString()}
-            </div>
-          </div>
-        ) : (
-          <p style={{ color: colors.textMuted }}>Loading infrastructure health...</p>
-        )}
-      </Card>
-
-      {/* Sync Progress Charts */}
-      <Card colors={colors} darkMode={false}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
-          <h3 style={{ margin: 0 }}>Sync Progress</h3>
-          <Button onClick={fetchSyncHistory}>Refresh</Button>
-        </div>
-
-        {syncHistory?.current && syncHistory.current.length > 0 ? (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '15px' }}>
-            {syncHistory.current.map(chain => {
-              const status = syncHistory.syncStatus?.[chain.chain]
-              const rates = syncHistory.syncRates?.[chain.chain]
-              const chartData = syncHistory.chartData?.[chain.chain]
-              const remoteBlock = syncHistory.rpcBlocks?.[chain.chain]
-
-              return (
-                <div key={chain.chain} style={{ padding: '15px', background: colors.statBg, borderRadius: '8px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-                    <strong>{chain.name}</strong>
-                    {status && (
-                      <Badge
-                        color={status.percentSynced >= 99 ? '#28a745' : status.percentSynced >= 90 ? '#ffc107' : '#dc3545'}
-                      >
-                        {status.percentSynced}% synced
-                      </Badge>
-                    )}
-                  </div>
-
-                  {/* Progress bar */}
-                  <div style={{ height: '8px', background: colors.borderLight, borderRadius: '4px', marginBottom: '10px' }}>
-                    <div style={{
-                      width: `${status?.percentSynced || 0}%`,
-                      height: '100%',
-                      background: status?.percentSynced && status.percentSynced >= 99 ? '#28a745' : colors.primary,
-                      borderRadius: '4px',
-                      transition: 'width 0.3s ease',
-                    }} />
-                  </div>
-
-                  {/* Sparkline chart */}
-                  {chartData && chartData.blocks.length > 1 && (
-                    <div style={{ display: 'flex', alignItems: 'flex-end', height: '40px', gap: '2px', marginBottom: '10px' }}>
-                      {chartData.blocks.map((val, i, arr) => {
-                        const min = Math.min(...arr)
-                        const max = Math.max(...arr)
-                        const range = max - min || 1
-                        const height = ((val - min) / range) * 100
-                        return (
+                        <div className="h-1 bg-border rounded-full mt-1">
                           <div
-                            key={i}
-                            style={{
-                              flex: 1,
-                              height: `${Math.max(5, height)}%`,
-                              background: i === arr.length - 1 ? colors.primary : '#b8daff',
-                              borderRadius: '2px',
-                            }}
-                            title={`${val.toLocaleString()} blocks`}
+                            className={cn(
+                              "h-full rounded-full",
+                              systemHealth.frontend_db.connections.usagePercent > 80 ? "bg-red-500" : "bg-green-500"
+                            )}
+                            style={{ width: `${systemHealth.frontend_db.connections.usagePercent}%` }}
                           />
-                        )
-                      })}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-xs text-muted-foreground">Cache Hit Ratio</div>
+                        <div className={cn(
+                          "text-xl font-bold",
+                          systemHealth.frontend_db.cacheHitRatio < 90 ? "text-yellow-500" : "text-green-500"
+                        )}>
+                          {systemHealth.frontend_db.cacheHitRatio}%
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-xs text-muted-foreground">Size</div>
+                        <div className="text-lg font-bold">{systemHealth.frontend_db.size}</div>
+                      </div>
+                      <div>
+                        <div className="text-xs text-muted-foreground">Deadlocks</div>
+                        <div className={cn(
+                          "text-lg font-bold",
+                          systemHealth.frontend_db.deadlocks > 0 ? "text-red-500" : ""
+                        )}>
+                          {systemHealth.frontend_db.deadlocks}
+                        </div>
+                      </div>
                     </div>
-                  )}
-
-                  {/* Stats */}
-                  <div style={{ fontSize: '12px', color: colors.textMuted }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                      <span>Local Block:</span>
-                      <strong>{chain.latest_block.toLocaleString()}</strong>
-                    </div>
-                    {remoteBlock && (
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                        <span>Remote Block:</span>
-                        <strong>{remoteBlock.toLocaleString()}</strong>
-                      </div>
-                    )}
-                    {status && status.behind > 0 && (
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px', color: status.behind > 100 ? '#dc3545' : '#ffc107' }}>
-                        <span>Behind:</span>
-                        <strong>{status.behind.toLocaleString()} blocks</strong>
-                      </div>
-                    )}
-                    {rates && (
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                        <span>Speed:</span>
-                        <strong>{rates.blocksPerHour.toLocaleString()} blocks/hr</strong>
-                      </div>
-                    )}
-                    {status && status.estimatedTimeToSync && (
-                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                        <span>ETA:</span>
-                        <strong style={{ color: status.estimatedTimeToSync === 'Synced' ? '#28a745' : 'inherit' }}>
-                          {status.estimatedTimeToSync}
-                        </strong>
-                      </div>
-                    )}
                   </div>
-                </div>
-              )
-            })}
-          </div>
-        ) : (
-          <p style={{ color: colors.textMuted }}>Loading sync progress...</p>
-        )}
+                )}
+
+                {systemHealth.backend_db && (
+                  <div className="p-4 bg-secondary rounded-lg">
+                    <h4 className="font-semibold mb-3">{systemHealth.backend_db.database}</h4>
+                    <div className="grid grid-cols-2 gap-3 text-sm">
+                      <div>
+                        <div className="text-xs text-muted-foreground">Connections</div>
+                        <div className={cn(
+                          "text-xl font-bold",
+                          systemHealth.backend_db.connections.usagePercent > 80 ? "text-red-500" : ""
+                        )}>
+                          {systemHealth.backend_db.connections.active + systemHealth.backend_db.connections.idle}/{systemHealth.backend_db.connections.max}
+                        </div>
+                        <div className="h-1 bg-border rounded-full mt-1">
+                          <div
+                            className={cn(
+                              "h-full rounded-full",
+                              systemHealth.backend_db.connections.usagePercent > 80 ? "bg-red-500" : "bg-green-500"
+                            )}
+                            style={{ width: `${systemHealth.backend_db.connections.usagePercent}%` }}
+                          />
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-xs text-muted-foreground">Cache Hit Ratio</div>
+                        <div className={cn(
+                          "text-xl font-bold",
+                          systemHealth.backend_db.cacheHitRatio < 90 ? "text-yellow-500" : "text-green-500"
+                        )}>
+                          {systemHealth.backend_db.cacheHitRatio}%
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-xs text-muted-foreground">Size</div>
+                        <div className="text-lg font-bold">{systemHealth.backend_db.size}</div>
+                      </div>
+                      <div>
+                        <div className="text-xs text-muted-foreground">Deadlocks</div>
+                        <div className={cn(
+                          "text-lg font-bold",
+                          systemHealth.backend_db.deadlocks > 0 ? "text-red-500" : ""
+                        )}>
+                          {systemHealth.backend_db.deadlocks}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="text-xs text-muted-foreground text-right">
+                Last updated: {new Date(systemHealth.timestamp).toLocaleTimeString()}
+              </div>
+            </div>
+          ) : (
+            <p className="text-muted-foreground">Loading infrastructure health...</p>
+          )}
+        </CardContent>
       </Card>
-    </>
+
+      {/* Sync Progress */}
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle className="flex items-center gap-2">
+            <Clock className="h-5 w-5" />
+            Sync Progress
+          </CardTitle>
+          <Button onClick={fetchSyncHistory} size="sm">
+            <RefreshCw className="h-4 w-4 mr-1" />
+            Refresh
+          </Button>
+        </CardHeader>
+        <CardContent>
+          {syncHistory?.current && syncHistory.current.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {syncHistory.current.map(chain => {
+                const status = syncHistory.syncStatus?.[chain.chain]
+                const rates = syncHistory.syncRates?.[chain.chain]
+                const chartData = syncHistory.chartData?.[chain.chain]
+                const remoteBlock = syncHistory.rpcBlocks?.[chain.chain]
+
+                return (
+                  <div key={chain.chain} className="p-4 bg-secondary rounded-lg">
+                    <div className="flex justify-between items-center mb-3">
+                      <span className="font-bold">{chain.name}</span>
+                      {status && (
+                        <Badge
+                          variant={status.percentSynced >= 99 ? 'success' : status.percentSynced >= 90 ? 'warning' : 'error'}
+                        >
+                          {status.percentSynced}% synced
+                        </Badge>
+                      )}
+                    </div>
+
+                    {/* Progress bar */}
+                    <div className="h-2 bg-border rounded-full mb-3">
+                      <div
+                        className={cn(
+                          "h-full rounded-full transition-all",
+                          status?.percentSynced && status.percentSynced >= 99 ? "bg-green-500" : "bg-gold"
+                        )}
+                        style={{ width: `${status?.percentSynced || 0}%` }}
+                      />
+                    </div>
+
+                    {/* Sparkline */}
+                    {chartData && chartData.blocks.length > 1 && (
+                      <div className="flex items-end h-10 gap-0.5 mb-3">
+                        {chartData.blocks.map((val, i, arr) => {
+                          const min = Math.min(...arr)
+                          const max = Math.max(...arr)
+                          const range = max - min || 1
+                          const height = ((val - min) / range) * 100
+                          return (
+                            <div
+                              key={i}
+                              className={cn(
+                                "flex-1 rounded-sm",
+                                i === arr.length - 1 ? "bg-gold" : "bg-blue-400/50"
+                              )}
+                              style={{ height: `${Math.max(10, height)}%` }}
+                              title={`${val.toLocaleString()} blocks`}
+                            />
+                          )
+                        })}
+                      </div>
+                    )}
+
+                    {/* Stats */}
+                    <div className="text-xs space-y-1 text-muted-foreground">
+                      <div className="flex justify-between">
+                        <span>Local Block:</span>
+                        <strong className="text-foreground">{chain.latest_block.toLocaleString()}</strong>
+                      </div>
+                      {remoteBlock && (
+                        <div className="flex justify-between">
+                          <span>Remote Block:</span>
+                          <strong className="text-foreground">{remoteBlock.toLocaleString()}</strong>
+                        </div>
+                      )}
+                      {status && status.behind > 0 && (
+                        <div className={cn(
+                          "flex justify-between",
+                          status.behind > 100 ? "text-red-500" : "text-yellow-500"
+                        )}>
+                          <span>Behind:</span>
+                          <strong>{status.behind.toLocaleString()} blocks</strong>
+                        </div>
+                      )}
+                      {rates && (
+                        <div className="flex justify-between">
+                          <span>Speed:</span>
+                          <strong className="text-foreground">{rates.blocksPerHour.toLocaleString()} blocks/hr</strong>
+                        </div>
+                      )}
+                      {status && status.estimatedTimeToSync && (
+                        <div className="flex justify-between">
+                          <span>ETA:</span>
+                          <strong className={status.estimatedTimeToSync === 'Synced' ? "text-green-500" : "text-foreground"}>
+                            {status.estimatedTimeToSync}
+                          </strong>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          ) : (
+            <p className="text-muted-foreground">Loading sync progress...</p>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Container Logs */}
+      <LogsViewer />
+    </div>
   )
-}
+})

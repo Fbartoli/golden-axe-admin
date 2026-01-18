@@ -1,7 +1,7 @@
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
-const BE_URL = process.env.BE_URL || 'http://golden-axe-be:8000'
+const BE_URL = process.env.BE_URL || 'http://horusblock-be:8000'
 
 export async function GET(req: Request): Promise<Response> {
   const { searchParams } = new URL(req.url)
@@ -29,22 +29,56 @@ export async function GET(req: Request): Promise<Response> {
     headers['api-key'] = apiKey
   }
 
-  const response = await fetch(`${BE_URL}/query-live?${params.toString()}`, {
-    cache: 'no-store',
-    headers,
-  })
+  try {
+    const response = await fetch(`${BE_URL}/query-live?${params.toString()}`, {
+      cache: 'no-store',
+      headers,
+    })
 
-  if (!response.ok || !response.body) {
-    const text = await response.text()
-    return new Response(text || 'Failed to connect to backend', { status: response.status || 502 })
+    if (!response.ok) {
+      const text = await response.text()
+      // Return error as SSE format so client can parse it
+      const errorData = JSON.stringify({ error: text || `Backend error: ${response.status}` })
+      return new Response(`data: ${errorData}\n\n`, {
+        status: 200,
+        headers: {
+          'Content-Type': 'text/event-stream',
+          'Cache-Control': 'no-cache, no-transform',
+          'Connection': 'keep-alive',
+        },
+      })
+    }
+
+    if (!response.body) {
+      const errorData = JSON.stringify({ error: 'No response body from backend' })
+      return new Response(`data: ${errorData}\n\n`, {
+        status: 200,
+        headers: {
+          'Content-Type': 'text/event-stream',
+          'Cache-Control': 'no-cache, no-transform',
+          'Connection': 'keep-alive',
+        },
+      })
+    }
+
+    return new Response(response.body, {
+      status: 200,
+      headers: {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache, no-transform',
+        'Connection': 'keep-alive',
+      },
+    })
+  } catch (err: any) {
+    // Return connection error as SSE format
+    const errorData = JSON.stringify({ error: `Failed to connect to backend: ${err.message}` })
+    return new Response(`data: ${errorData}\n\n`, {
+      status: 200,
+      headers: {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache, no-transform',
+        'Connection': 'keep-alive',
+      },
+    })
   }
-
-  return new Response(response.body, {
-    status: 200,
-    headers: {
-      'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache, no-transform',
-      'Connection': 'keep-alive',
-    },
-  })
 }

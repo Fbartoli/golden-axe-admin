@@ -86,17 +86,27 @@ export interface SyncStatus {
       total_blocks?: number
       latest_log_block?: number
       total_logs?: number
+      total_txs?: number
     }
   >
   dbConnected: boolean
 }
 
 export interface SyncEvent {
-  chain?: number
-  new_block?: string
-  num?: number
-  active_connections?: number
   timestamp: number
+  chains?: Array<{
+    chain: string
+    name: string
+    current: string
+    target: string
+    behind: string
+    running: boolean
+  }>
+  connections?: Record<string, {
+    active: number
+    idle: number
+    waiting: number
+  }>
 }
 
 export interface SyncHistoryData {

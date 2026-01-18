@@ -1,2 +1,13 @@
 /.next
 /node_modules
+
+# Environment files with secrets
+.env.local
+.env*.local
+
+# Playwright
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
+e2e/.auth/

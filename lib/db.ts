@@ -1,7 +1,7 @@
 import postgres from 'postgres'
 
-const feConnectionString = process.env.PG_URL_FE || 'postgres://golden_axe:golden_axe@golden-axe-postgres:5432/fe'
-const beConnectionString = process.env.PG_URL_BE || 'postgres://golden_axe:golden_axe@golden-axe-postgres:5432/be'
+const feConnectionString = process.env.PG_URL_FE || 'postgres://horusblock:horusblock@horusblock-postgres:5432/fe'
+const beConnectionString = process.env.PG_URL_BE || 'postgres://horusblock:horusblock@horusblock-postgres:5432/be'
 
 // Connection pool options - reduce connections for admin panel
 const poolOptions = {

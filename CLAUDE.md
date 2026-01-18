@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Golden Axe Admin Panel - a Next.js admin interface for managing the Golden Axe EVM blockchain indexer. It connects to two PostgreSQL databases:
+Horusblock Admin Panel - a Next.js admin interface for managing the Horusblock EVM blockchain indexer. It connects to two PostgreSQL databases:
 - **Frontend DB** (`PG_URL_FE`): Users, plans, API keys
 - **Backend DB** (`PG_URL_BE`): Indexed blockchain data
 

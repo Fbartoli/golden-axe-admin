@@ -1,11 +1,25 @@
 'use client'
 
-import { useState, FormEvent } from 'react'
-import { useAdmin } from '@/components/AdminContext'
+import { useState, FormEvent, memo } from 'react'
+import { ArrowLeft, Plus, Key, Shield, Users, Trash2, Copy } from 'lucide-react'
 import { User, UserDetail, ApiKey, AdminKey } from '@/types'
-import { Button } from '@/components/ui/Button'
-import { Card } from '@/components/ui/Card'
-import { Badge } from '@/components/ui/Badge'
+import {
+  Button,
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+  Badge,
+  Input,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui'
+import { cn } from '@/lib/utils'
 
 type ViewMode = 'users' | 'keys' | 'admin-keys'
 
@@ -15,13 +29,11 @@ interface KeyFormState {
 }
 
 interface UsersTabProps {
-  // User data
   users: User[]
   filteredUsers: User[]
   selectedUser: UserDetail | null
   setSelectedUser: (user: UserDetail | null) => void
   fetchUserDetail: (email: string) => void
-  // Key data
   keys: ApiKey[]
   filteredKeys: ApiKey[]
   adminKeys: AdminKey[]
@@ -29,7 +41,7 @@ interface UsersTabProps {
   onRefreshAdminKeys: () => void
 }
 
-export function UsersTab({
+export const UsersTab = memo(function UsersTab({
   users,
   filteredUsers,
   selectedUser,
@@ -41,7 +53,6 @@ export function UsersTab({
   onRefreshKeys,
   onRefreshAdminKeys,
 }: UsersTabProps) {
-  const { colors, styles, darkMode } = useAdmin()
   const [viewMode, setViewMode] = useState<ViewMode>('users')
   const [keyForm, setKeyForm] = useState<KeyFormState>({ owner_email: '', origins: '' })
 
@@ -91,397 +102,410 @@ export function UsersTab({
   // User detail view
   if (selectedUser) {
     return (
-      <>
+      <div className="space-y-6">
         <Button
           variant="secondary"
           onClick={() => setSelectedUser(null)}
-          style={{ marginBottom: '15px' }}
         >
-          ← Back to Users
+          <ArrowLeft className="h-4 w-4 mr-1" />
+          Back to Users
         </Button>
 
-        <Card colors={colors} darkMode={darkMode} title={selectedUser.email}>
-          <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap', marginBottom: '15px' }}>
-            <div style={styles.stat}>
-              <strong>API Keys:</strong> {selectedUser.keys.filter((k) => !k.deleted_at).length}
+        <Card>
+          <CardHeader>
+            <CardTitle>{selectedUser.email}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-wrap gap-4">
+              <div className="p-3 bg-secondary rounded-lg">
+                <div className="text-xs text-muted-foreground">API Keys</div>
+                <div className="text-2xl font-bold">{selectedUser.keys.filter(k => !k.deleted_at).length}</div>
+              </div>
+              <div className="p-3 bg-secondary rounded-lg">
+                <div className="text-xs text-muted-foreground">Plan Changes</div>
+                <div className="text-2xl font-bold">{selectedUser.plans.length}</div>
+              </div>
+              <div className="p-3 bg-secondary rounded-lg">
+                <div className="text-xs text-muted-foreground">Collaborators</div>
+                <div className="text-2xl font-bold">{selectedUser.collabs.filter(c => !c.disabled_at).length}</div>
+              </div>
             </div>
-            <div style={styles.stat}>
-              <strong>Plan Changes:</strong> {selectedUser.plans.length}
-            </div>
-            <div style={styles.stat}>
-              <strong>Collaborators:</strong> {selectedUser.collabs.filter((c) => !c.disabled_at).length}
-            </div>
-          </div>
+          </CardContent>
         </Card>
 
-        <Card colors={colors} darkMode={darkMode} title="API Keys">
-          {selectedUser.keys.length === 0 ? (
-            <p style={{ color: colors.textMuted }}>No API keys</p>
-          ) : (
-            <table style={styles.table}>
-              <thead>
-                <tr>
-                  <th style={styles.th}>Secret</th>
-                  <th style={styles.th}>Origins</th>
-                  <th style={styles.th}>Created</th>
-                  <th style={styles.th}>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {selectedUser.keys.map((k) => (
-                  <tr key={k.secret} style={{ opacity: k.deleted_at ? 0.5 : 1 }}>
-                    <td style={styles.td}>
-                      <code>{k.secret}</code>
-                    </td>
-                    <td style={styles.td}>{k.origins.join(', ') || '-'}</td>
-                    <td style={styles.td}>{new Date(k.created_at).toLocaleDateString()}</td>
-                    <td style={styles.td}>
-                      <Badge variant={k.deleted_at ? 'secondary' : 'success'}>
-                        {k.deleted_at ? 'Deleted' : 'Active'}
-                      </Badge>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
+        <Card>
+          <CardHeader>
+            <CardTitle>API Keys</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {selectedUser.keys.length === 0 ? (
+              <p className="text-muted-foreground">No API keys</p>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Secret</TableHead>
+                    <TableHead>Origins</TableHead>
+                    <TableHead>Created</TableHead>
+                    <TableHead>Status</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {selectedUser.keys.map(k => (
+                    <TableRow key={k.secret} className={cn(k.deleted_at && "opacity-50")}>
+                      <TableCell><code className="text-xs">{k.secret}</code></TableCell>
+                      <TableCell>{k.origins.join(', ') || '-'}</TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {new Date(k.created_at).toLocaleDateString()}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={k.deleted_at ? 'secondary' : 'success'}>
+                          {k.deleted_at ? 'Deleted' : 'Active'}
+                        </Badge>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
         </Card>
 
-        <Card colors={colors} darkMode={darkMode} title="Plan History">
-          {selectedUser.plans.length === 0 ? (
-            <p style={{ color: colors.textMuted }}>No plan history</p>
-          ) : (
-            <table style={styles.table}>
-              <thead>
-                <tr>
-                  <th style={styles.th}>Plan</th>
-                  <th style={styles.th}>Rate</th>
-                  <th style={styles.th}>Timeout</th>
-                  <th style={styles.th}>Connections</th>
-                  <th style={styles.th}>Queries</th>
-                  <th style={styles.th}>Payment</th>
-                  <th style={styles.th}>Date</th>
-                </tr>
-              </thead>
-              <tbody>
-                {selectedUser.plans.map((p, i) => (
-                  <tr key={i}>
-                    <td style={styles.td}>
-                      <Badge variant="primary">{p.name}</Badge>
-                    </td>
-                    <td style={styles.td}>{p.rate}/s</td>
-                    <td style={styles.td}>{p.timeout}s</td>
-                    <td style={styles.td}>{p.connections}</td>
-                    <td style={styles.td}>{p.queries.toLocaleString()}</td>
-                    <td style={styles.td}>
-                      {p.daimo_tx ? 'Daimo' : p.stripe_customer ? 'Stripe' : '-'}
-                    </td>
-                    <td style={styles.td}>{new Date(p.created_at).toLocaleDateString()}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
+        <Card>
+          <CardHeader>
+            <CardTitle>Plan History</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {selectedUser.plans.length === 0 ? (
+              <p className="text-muted-foreground">No plan history</p>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Plan</TableHead>
+                    <TableHead>Rate</TableHead>
+                    <TableHead>Timeout</TableHead>
+                    <TableHead>Connections</TableHead>
+                    <TableHead>Queries</TableHead>
+                    <TableHead>Payment</TableHead>
+                    <TableHead>Date</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {selectedUser.plans.map((p, i) => (
+                    <TableRow key={i}>
+                      <TableCell><Badge variant="gold">{p.name}</Badge></TableCell>
+                      <TableCell>{p.rate}/s</TableCell>
+                      <TableCell>{p.timeout}s</TableCell>
+                      <TableCell>{p.connections}</TableCell>
+                      <TableCell>{p.queries.toLocaleString()}</TableCell>
+                      <TableCell>{p.daimo_tx ? 'Daimo' : p.stripe_customer ? 'Stripe' : '-'}</TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {new Date(p.created_at).toLocaleDateString()}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
         </Card>
 
-        <Card colors={colors} darkMode={darkMode} title="Usage (Last 30 Days)">
-          {selectedUser.usage.length === 0 ? (
-            <p style={{ color: colors.textMuted }}>No usage data</p>
-          ) : (
-            <div style={{ display: 'flex', alignItems: 'flex-end', height: '150px', gap: '2px' }}>
-              {selectedUser.usage
-                .slice()
-                .reverse()
-                .map((u, i) => {
-                  const max = Math.max(...selectedUser.usage.map((x) => x.queries))
-                  const height = max > 0 ? (u.queries / max) * 130 : 0
+        <Card>
+          <CardHeader>
+            <CardTitle>Usage (Last 30 Days)</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {selectedUser.usage.length === 0 ? (
+              <p className="text-muted-foreground">No usage data</p>
+            ) : (
+              <div className="flex items-end h-40 gap-0.5">
+                {selectedUser.usage.slice().reverse().map((u, i) => {
+                  const max = Math.max(...selectedUser.usage.map(x => x.queries))
+                  const height = max > 0 ? (u.queries / max) * 100 : 0
                   return (
                     <div
                       key={i}
-                      role="img"
-                      aria-label={`${u.day}: ${u.queries.toLocaleString()} queries`}
+                      className="flex-1 bg-gold rounded-t-sm min-w-2"
+                      style={{ height: `${height}%` }}
                       title={`${u.day}: ${u.queries.toLocaleString()} queries`}
-                      style={{
-                        flex: 1,
-                        height: `${height}px`,
-                        background: colors.primary,
-                        borderRadius: '2px 2px 0 0',
-                        minWidth: '8px',
-                      }}
                     />
                   )
                 })}
-            </div>
-          )}
+              </div>
+            )}
+          </CardContent>
         </Card>
 
         {selectedUser.collabs.length > 0 && (
-          <Card colors={colors} darkMode={darkMode} title="Collaborators">
-            <table style={styles.table}>
-              <thead>
-                <tr>
-                  <th style={styles.th}>Email</th>
-                  <th style={styles.th}>Added</th>
-                  <th style={styles.th}>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {selectedUser.collabs.map((c, i) => (
-                  <tr key={i} style={{ opacity: c.disabled_at ? 0.5 : 1 }}>
-                    <td style={styles.td}>{c.email}</td>
-                    <td style={styles.td}>{new Date(c.created_at).toLocaleDateString()}</td>
-                    <td style={styles.td}>
-                      <Badge variant={c.disabled_at ? 'secondary' : 'success'}>
-                        {c.disabled_at ? 'Disabled' : 'Active'}
-                      </Badge>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <Card>
+            <CardHeader>
+              <CardTitle>Collaborators</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Email</TableHead>
+                    <TableHead>Added</TableHead>
+                    <TableHead>Status</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {selectedUser.collabs.map((c, i) => (
+                    <TableRow key={i} className={cn(c.disabled_at && "opacity-50")}>
+                      <TableCell>{c.email}</TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {new Date(c.created_at).toLocaleDateString()}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={c.disabled_at ? 'secondary' : 'success'}>
+                          {c.disabled_at ? 'Disabled' : 'Active'}
+                        </Badge>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
           </Card>
         )}
-      </>
+      </div>
     )
   }
 
-  // View mode toggle
-  const viewModeStyle = (mode: ViewMode) => ({
-    padding: '8px 16px',
-    background: viewMode === mode ? colors.primary : colors.cardBg,
-    color: viewMode === mode ? '#fff' : colors.text,
-    border: `1px solid ${viewMode === mode ? colors.primary : colors.border}`,
-    borderRadius: '4px',
-    cursor: 'pointer',
-    fontSize: '14px',
-    transition: 'all 0.2s ease',
-  })
-
   return (
-    <>
+    <div className="space-y-6">
       {/* View Mode Toggle */}
-      <div style={{ display: 'flex', gap: '8px', marginBottom: '20px' }}>
-        <button
-          style={viewModeStyle('users')}
+      <div className="flex gap-2">
+        <Button
+          variant={viewMode === 'users' ? 'gold' : 'outline'}
           onClick={() => setViewMode('users')}
+          className="gap-2"
         >
+          <Users className="h-4 w-4" />
           Users ({users.length})
-        </button>
-        <button
-          style={viewModeStyle('keys')}
+        </Button>
+        <Button
+          variant={viewMode === 'keys' ? 'gold' : 'outline'}
           onClick={() => setViewMode('keys')}
+          className="gap-2"
         >
+          <Key className="h-4 w-4" />
           API Keys ({keys.filter(k => !k.deleted_at).length})
-        </button>
-        <button
-          style={viewModeStyle('admin-keys')}
+        </Button>
+        <Button
+          variant={viewMode === 'admin-keys' ? 'gold' : 'outline'}
           onClick={() => setViewMode('admin-keys')}
+          className="gap-2"
         >
+          <Shield className="h-4 w-4" />
           Admin Keys ({adminKeys.filter(k => !k.deleted_at).length})
-        </button>
+        </Button>
       </div>
 
       {/* Users View */}
       {viewMode === 'users' && (
-        <Card colors={colors} darkMode={darkMode} title="Users">
-          {users.length === 0 ? (
-            <p style={{ color: colors.textMuted }}>No users found</p>
-          ) : (
-            <table style={styles.table}>
-              <thead>
-                <tr>
-                  <th style={styles.th}>Email</th>
-                  <th style={styles.th}>Plan</th>
-                  <th style={styles.th}>API Keys</th>
-                  <th style={styles.th}>Queries (30d)</th>
-                  <th style={styles.th}>Last Active</th>
-                  <th style={styles.th}>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredUsers.map((u) => (
-                  <tr key={u.email}>
-                    <td style={styles.td}>{u.email}</td>
-                    <td style={styles.td}>
-                      {u.plan_name ? (
-                        <Badge
-                          color={
-                            u.plan_name === 'Pro'
-                              ? '#007bff'
-                              : u.plan_name === 'Dedicated'
-                              ? '#6f42c1'
-                              : '#28a745'
-                          }
-                        >
-                          {u.plan_name}
-                        </Badge>
-                      ) : (
-                        <span style={{ color: colors.textMuted }}>No plan</span>
-                      )}
-                    </td>
-                    <td style={styles.td}>{u.key_count}</td>
-                    <td style={styles.td}>{u.queries_30d.toLocaleString()}</td>
-                    <td style={styles.td}>
-                      {u.last_active ? new Date(u.last_active).toLocaleDateString() : '-'}
-                    </td>
-                    <td style={styles.td}>
-                      <Button variant="primary" size="sm" onClick={() => fetchUserDetail(u.email)}>
-                        View
-                      </Button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
+        <Card>
+          <CardHeader>
+            <CardTitle>Users</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {users.length === 0 ? (
+              <p className="text-muted-foreground">No users found</p>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Email</TableHead>
+                    <TableHead>Plan</TableHead>
+                    <TableHead>API Keys</TableHead>
+                    <TableHead>Queries (30d)</TableHead>
+                    <TableHead>Last Active</TableHead>
+                    <TableHead>Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredUsers.map(u => (
+                    <TableRow key={u.email}>
+                      <TableCell className="font-medium">{u.email}</TableCell>
+                      <TableCell>
+                        {u.plan_name ? (
+                          <Badge
+                            variant={
+                              u.plan_name === 'Pro' ? 'info' :
+                              u.plan_name === 'Dedicated' ? 'gold' : 'success'
+                            }
+                          >
+                            {u.plan_name}
+                          </Badge>
+                        ) : (
+                          <span className="text-muted-foreground">No plan</span>
+                        )}
+                      </TableCell>
+                      <TableCell>{u.key_count}</TableCell>
+                      <TableCell className="tabular-nums">{u.queries_30d.toLocaleString()}</TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {u.last_active ? new Date(u.last_active).toLocaleDateString() : '-'}
+                      </TableCell>
+                      <TableCell>
+                        <Button size="sm" onClick={() => fetchUserDetail(u.email)}>
+                          View
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
         </Card>
       )}
 
       {/* API Keys View */}
       {viewMode === 'keys' && (
         <>
-          <Card colors={colors} darkMode={darkMode} title="Add API Key">
-            <form onSubmit={addKey} style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'flex-end' }}>
-              <input
-                style={{ ...styles.input, flex: '1', minWidth: '200px', marginBottom: 0 }}
-                type="email"
-                name="owner_email"
-                autoComplete="email"
-                placeholder="Owner Email"
-                value={keyForm.owner_email}
-                onChange={(e) => setKeyForm({ ...keyForm, owner_email: e.target.value })}
-                required
-              />
-              <input
-                style={{ ...styles.input, flex: '1', minWidth: '200px', marginBottom: 0 }}
-                type="text"
-                name="origins"
-                autoComplete="off"
-                placeholder="Origins (comma-separated)"
-                value={keyForm.origins}
-                onChange={(e) => setKeyForm({ ...keyForm, origins: e.target.value })}
-              />
-              <Button type="submit">Create Key</Button>
-            </form>
+          <Card>
+            <CardHeader>
+              <CardTitle>Add API Key</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={addKey} className="flex flex-wrap gap-3">
+                <Input
+                  className="flex-1 min-w-[200px]"
+                  type="email"
+                  placeholder="Owner Email"
+                  value={keyForm.owner_email}
+                  onChange={e => setKeyForm({ ...keyForm, owner_email: e.target.value })}
+                  required
+                />
+                <Input
+                  className="flex-1 min-w-[200px]"
+                  placeholder="Origins (comma-separated)"
+                  value={keyForm.origins}
+                  onChange={e => setKeyForm({ ...keyForm, origins: e.target.value })}
+                />
+                <Button type="submit" variant="gold">
+                  <Plus className="h-4 w-4" />
+                  Create Key
+                </Button>
+              </form>
+            </CardContent>
           </Card>
 
-          <Card colors={colors} darkMode={darkMode} title="API Keys">
-            <table style={styles.table}>
-              <thead>
-                <tr>
-                  <th style={styles.th}>Owner</th>
-                  <th style={styles.th}>Secret</th>
-                  <th style={styles.th}>Origins</th>
-                  <th style={styles.th}>Created</th>
-                  <th style={styles.th}>Status</th>
-                  <th style={styles.th}>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredKeys.map((k) => (
-                  <tr key={k.secret} style={{ opacity: k.deleted_at ? 0.5 : 1 }}>
-                    <td style={styles.td}>{k.owner_email}</td>
-                    <td style={styles.td}>
-                      <code>{k.secret.substring(0, 8)}…</code>
-                    </td>
-                    <td style={styles.td}>{k.origins.join(', ') || '-'}</td>
-                    <td style={styles.td}>{new Date(k.created_at).toLocaleDateString()}</td>
-                    <td style={styles.td}>
-                      <Badge variant={k.deleted_at ? 'secondary' : 'success'}>
-                        {k.deleted_at ? 'Deleted' : 'Active'}
-                      </Badge>
-                    </td>
-                    <td style={styles.td}>
-                      {!k.deleted_at && (
-                        <Button variant="danger" size="sm" onClick={() => deleteKey(k.secret)}>
-                          Delete
-                        </Button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <Card>
+            <CardHeader>
+              <CardTitle>API Keys</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Owner</TableHead>
+                    <TableHead>Secret</TableHead>
+                    <TableHead>Origins</TableHead>
+                    <TableHead>Created</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredKeys.map(k => (
+                    <TableRow key={k.secret} className={cn(k.deleted_at && "opacity-50")}>
+                      <TableCell>{k.owner_email}</TableCell>
+                      <TableCell><code className="text-xs">{k.secret.substring(0, 8)}...</code></TableCell>
+                      <TableCell>{k.origins.join(', ') || '-'}</TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {new Date(k.created_at).toLocaleDateString()}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={k.deleted_at ? 'secondary' : 'success'}>
+                          {k.deleted_at ? 'Deleted' : 'Active'}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        {!k.deleted_at && (
+                          <Button variant="danger" size="sm" onClick={() => deleteKey(k.secret)}>
+                            <Trash2 className="h-3 w-3" />
+                          </Button>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
           </Card>
         </>
       )}
 
       {/* Admin Keys View */}
       {viewMode === 'admin-keys' && (
-        <Card colors={colors} darkMode={darkMode}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
+        <Card>
+          <CardHeader className="flex flex-row items-start justify-between">
             <div>
-              <h3 style={{ margin: 0 }}>Admin Keys (Unlimited)</h3>
-              <p style={{ color: colors.textMuted, fontSize: '13px', margin: '5px 0 0 0' }}>
+              <CardTitle>Admin Keys (Unlimited)</CardTitle>
+              <CardDescription>
                 Admin keys have 1000 connections and 500K queries/month. Use for admin panel and testing.
-              </p>
+              </CardDescription>
             </div>
-            <Button onClick={createAdminKey}>Create Admin Key</Button>
-          </div>
-
-          {adminKeys.filter(k => !k.deleted_at).length === 0 ? (
-            <p style={{ color: colors.textMuted }}>
-              No admin keys. Click "Create Admin Key" to generate one.
-            </p>
-          ) : (
-            <table style={styles.table}>
-              <thead>
-                <tr>
-                  <th style={styles.th}>Org</th>
-                  <th style={styles.th}>Secret</th>
-                  <th style={styles.th}>Created</th>
-                  <th style={styles.th}>Status</th>
-                  <th style={styles.th}>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {adminKeys
-                  .filter((k) => !k.deleted_at)
-                  .map((k) => (
-                    <tr key={k.secret}>
-                      <td style={styles.td}>{k.org}</td>
-                      <td style={styles.td}>
-                        <code
-                          role="button"
-                          tabIndex={0}
-                          style={{
-                            background: colors.statBg,
-                            padding: '2px 6px',
-                            borderRadius: '3px',
-                            cursor: 'pointer',
-                          }}
+            <Button onClick={createAdminKey} variant="gold">
+              <Plus className="h-4 w-4" />
+              Create Admin Key
+            </Button>
+          </CardHeader>
+          <CardContent>
+            {adminKeys.filter(k => !k.deleted_at).length === 0 ? (
+              <p className="text-muted-foreground">
+                No admin keys. Click "Create Admin Key" to generate one.
+              </p>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Org</TableHead>
+                    <TableHead>Secret</TableHead>
+                    <TableHead>Created</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {adminKeys.filter(k => !k.deleted_at).map(k => (
+                    <TableRow key={k.secret}>
+                      <TableCell className="font-medium">{k.org}</TableCell>
+                      <TableCell>
+                        <button
+                          className="font-mono text-xs bg-secondary px-2 py-1 rounded cursor-pointer hover:bg-muted"
                           onClick={() => {
                             navigator.clipboard.writeText(k.secret)
                             alert('Copied to clipboard!')
                           }}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter' || e.key === ' ') {
-                              e.preventDefault()
-                              navigator.clipboard.writeText(k.secret)
-                              alert('Copied to clipboard!')
-                            }
-                          }}
                           title="Click to copy"
                         >
                           {k.secret}
-                        </code>
-                      </td>
-                      <td style={styles.td}>{new Date(k.created_at).toLocaleDateString()}</td>
-                      <td style={styles.td}>
+                          <Copy className="h-3 w-3 inline ml-2" />
+                        </button>
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {new Date(k.created_at).toLocaleDateString()}
+                      </TableCell>
+                      <TableCell>
                         <Badge variant="success">Active</Badge>
-                      </td>
-                      <td style={styles.td}>
+                      </TableCell>
+                      <TableCell>
                         <Button variant="danger" size="sm" onClick={() => deleteAdminKey(k.secret)}>
-                          Delete
+                          <Trash2 className="h-3 w-3" />
                         </Button>
-                      </td>
-                    </tr>
+                      </TableCell>
+                    </TableRow>
                   ))}
-              </tbody>
-            </table>
-          )}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
         </Card>
       )}
-    </>
+    </div>
   )
-}
+})

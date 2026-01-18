@@ -1,16 +1,37 @@
 'use client'
 
-import { useState } from 'react'
-import { useAdmin } from '@/components/AdminContext'
+import { useState, memo } from 'react'
+import { Database, Code, Play, Square, Trash2, HelpCircle, X } from 'lucide-react'
 import { Network, SchemaData, QueryResult, DecodedResult } from '@/types'
-import { Button } from '@/components/ui/Button'
-import { Card } from '@/components/ui/Card'
-import { Badge } from '@/components/ui/Badge'
+import {
+  Button,
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+  Badge,
+  Textarea,
+  Input,
+  Label,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+  ScrollArea,
+} from '@/components/ui'
+import { cn } from '@/lib/utils'
 
 type ViewMode = 'query' | 'decoder'
 
 interface QueryTabProps {
-  // Query data
   networks: Network[]
   queryChain: string
   setQueryChain: (chain: string) => void
@@ -35,7 +56,6 @@ interface QueryTabProps {
   showHelper: boolean
   setShowHelper: (show: boolean) => void
   schemaData: SchemaData | null
-  // Decoder data
   abiInput: string
   setAbiInput: (abi: string) => void
   topicsInput: string
@@ -46,7 +66,7 @@ interface QueryTabProps {
   decodeEvent: () => void
 }
 
-export function QueryTab({
+export const QueryTab = memo(function QueryTab({
   networks,
   queryChain,
   setQueryChain,
@@ -80,388 +100,352 @@ export function QueryTab({
   decodedResult,
   decodeEvent,
 }: QueryTabProps) {
-  const { colors, styles, darkMode } = useAdmin()
   const [viewMode, setViewMode] = useState<ViewMode>('query')
 
-  const viewModeStyle = (mode: ViewMode) => ({
-    padding: '8px 16px',
-    background: viewMode === mode ? colors.primary : colors.cardBg,
-    color: viewMode === mode ? '#fff' : colors.text,
-    border: `1px solid ${viewMode === mode ? colors.primary : colors.border}`,
-    borderRadius: '4px',
-    cursor: 'pointer',
-    fontSize: '14px',
-    transition: 'all 0.2s ease',
-  })
-
   return (
-    <>
+    <div className="space-y-6">
       {/* View Mode Toggle */}
-      <div style={{ display: 'flex', gap: '8px', marginBottom: '20px', alignItems: 'center' }}>
-        <button style={viewModeStyle('query')} onClick={() => setViewMode('query')}>
+      <div className="flex gap-2">
+        <Button
+          variant={viewMode === 'query' ? 'gold' : 'outline'}
+          onClick={() => setViewMode('query')}
+          className="gap-2"
+        >
+          <Database className="h-4 w-4" />
           SQL Query
-        </button>
-        <button style={viewModeStyle('decoder')} onClick={() => setViewMode('decoder')}>
+        </Button>
+        <Button
+          variant={viewMode === 'decoder' ? 'gold' : 'outline'}
+          onClick={() => setViewMode('decoder')}
+          className="gap-2"
+        >
+          <Code className="h-4 w-4" />
           Event Decoder
-        </button>
+        </Button>
       </div>
 
       {/* Query View */}
       {viewMode === 'query' && (
-        <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
+        <div className="flex gap-6 flex-wrap">
           {/* Main Query Panel */}
-          <div style={{ flex: '1 1 600px', minWidth: '300px' }}>
-            <Card colors={colors} darkMode={darkMode}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
-                <h3 style={{ margin: 0 }}>SQL Query</h3>
-                <Button variant="secondary" size="sm" onClick={() => setShowHelper(!showHelper)}>
+          <div className="flex-1 min-w-[300px] space-y-6">
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <CardTitle>SQL Query</CardTitle>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => setShowHelper(!showHelper)}
+                >
+                  {showHelper ? <X className="h-4 w-4 mr-1" /> : <HelpCircle className="h-4 w-4 mr-1" />}
                   {showHelper ? 'Hide Helper' : 'Show Helper'}
                 </Button>
-              </div>
-
-              <div style={{ marginBottom: '15px' }}>
-                <label style={{ marginRight: '10px' }}>
-                  <strong>Chain:</strong>
-                  <select
-                    value={queryChain}
-                    onChange={e => setQueryChain(e.target.value)}
-                    style={{ ...styles.input, marginLeft: '10px', width: '200px' }}
-                  >
-                    {networks.filter(n => n.enabled).map(n => (
-                      <option key={n.chain} value={n.chain}>{n.name} ({n.chain})</option>
-                    ))}
-                    {networks.filter(n => n.enabled).length === 0 && (
-                      <>
-                        <option value="1">Main (1)</option>
-                        <option value="7777777">Zora (7777777)</option>
-                      </>
-                    )}
-                  </select>
-                </label>
-              </div>
-
-              <div style={{ marginBottom: '15px' }}>
-                <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
-                  Event Signatures <span style={{ fontWeight: 'normal', color: colors.textMuted }}>(one per line, enables ABI decoding)</span>
-                </label>
-                <textarea
-                  name="eventSignatures"
-                  spellCheck={false}
-                  value={eventSignatures}
-                  onChange={e => setEventSignatures(e.target.value)}
-                  placeholder="Transfer(address indexed from, address indexed to, uint256 value)
-Approval(address indexed owner, address indexed spender, uint256 value)"
-                  style={{
-                    width: '100%',
-                    height: '80px',
-                    fontFamily: 'monospace',
-                    fontSize: '13px',
-                    padding: '10px',
-                    border: `1px solid ${colors.border}`,
-                    borderRadius: '4px',
-                    resize: 'vertical',
-                    background: colors.inputBg,
-                    color: colors.text,
-                  }}
-                />
-              </div>
-
-              <div style={{ marginBottom: '15px' }}>
-                <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>SQL Query</label>
-                <textarea
-                  name="queryText"
-                  spellCheck={false}
-                  value={queryText}
-                  onChange={e => setQueryText(e.target.value)}
-                  style={{
-                    width: '100%',
-                    height: '200px',
-                    fontFamily: 'monospace',
-                    fontSize: '14px',
-                    padding: '10px',
-                    border: `1px solid ${colors.border}`,
-                    borderRadius: '4px',
-                    resize: 'vertical',
-                    background: colors.inputBg,
-                    color: colors.text,
-                  }}
-                  placeholder="Enter SQL query..."
-                />
-                {/* Validation Errors */}
-                {queryErrors.length > 0 && (
-                  <div style={{ marginTop: '10px', padding: '10px', background: darkMode ? '#4a1c1c' : '#f8d7da', color: darkMode ? '#f8d7da' : '#721c24', borderRadius: '4px', fontSize: '13px' }}>
-                    <strong>Validation Issues:</strong>
-                    <ul style={{ margin: '5px 0 0 0', paddingLeft: '20px' }}>
-                      {queryErrors.map((err, i) => (
-                        <li key={i}>{err}</li>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex items-center gap-3">
+                  <Label className="font-semibold">Chain:</Label>
+                  <Select value={queryChain} onValueChange={setQueryChain}>
+                    <SelectTrigger className="w-48">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {networks.filter(n => n.enabled).map(n => (
+                        <SelectItem key={n.chain} value={n.chain.toString()}>
+                          {n.name} ({n.chain})
+                        </SelectItem>
                       ))}
-                    </ul>
-                  </div>
-                )}
-                {queryErrors.length === 0 && queryText.trim() && (
-                  <div style={{ marginTop: '10px', padding: '8px 10px', background: darkMode ? '#1c4a1c' : '#d4edda', color: darkMode ? '#d4edda' : '#155724', borderRadius: '4px', fontSize: '13px' }}>
-                    ✓ Query looks valid
-                  </div>
-                )}
-              </div>
+                      {networks.filter(n => n.enabled).length === 0 && (
+                        <>
+                          <SelectItem value="1">Main (1)</SelectItem>
+                          <SelectItem value="7777777">Zora (7777777)</SelectItem>
+                        </>
+                      )}
+                    </SelectContent>
+                  </Select>
+                </div>
 
-              <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
-                <Button onClick={executeQuery} disabled={queryLoading}>
-                  {liveQueryEnabled ? (liveQueryConnected ? 'Streaming...' : 'Start Live') : (queryLoading ? 'Running...' : 'Run Query')}
-                </Button>
-                {liveQueryEnabled && liveQueryConnected && (
-                  <Button variant="danger" onClick={stopLiveQuery}>Stop</Button>
-                )}
-                <label style={{ display: 'flex', alignItems: 'center', gap: '5px', cursor: 'pointer' }}>
-                  <input
-                    type="checkbox"
-                    name="liveQueryEnabled"
-                    checked={liveQueryEnabled}
-                    onChange={e => {
-                      setLiveQueryEnabled(e.target.checked)
-                      if (!e.target.checked) stopLiveQuery()
-                    }}
+                <div className="space-y-2">
+                  <Label className="font-semibold">
+                    Event Signatures{' '}
+                    <span className="font-normal text-muted-foreground">(one per line, enables ABI decoding)</span>
+                  </Label>
+                  <Textarea
+                    className="font-mono text-xs h-20"
+                    value={eventSignatures}
+                    onChange={e => setEventSignatures(e.target.value)}
+                    placeholder={`Transfer(address indexed from, address indexed to, uint256 value)\nApproval(address indexed owner, address indexed spender, uint256 value)`}
                   />
-                  <strong>Live Mode</strong>
-                  <span style={{ color: colors.textMuted, fontSize: '12px' }}>(streams new results as blocks sync)</span>
-                </label>
-                {liveQueryEnabled && (
-                  <input
-                    type="text"
-                    name="apiKey"
-                    autoComplete="off"
-                    spellCheck={false}
-                    placeholder="API Key (optional, bypasses rate limits)"
-                    value={apiKey}
-                    onChange={e => setApiKey(e.target.value)}
-                    style={{ ...styles.input, width: '280px', marginBottom: 0 }}
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="font-semibold">SQL Query</Label>
+                  <Textarea
+                    className="font-mono text-sm h-48"
+                    value={queryText}
+                    onChange={e => setQueryText(e.target.value)}
+                    placeholder="Enter SQL query..."
                   />
-                )}
-                {!liveQueryEnabled && queryTime !== null && (
-                  <span style={{ color: colors.textMuted }}>Completed in {queryTime}ms</span>
-                )}
-                {liveQueryEnabled && liveQueryConnected && (
-                  <Badge variant="success">Connected - {liveQueryResults.length} results</Badge>
-                )}
-                {liveQueryEnabled && liveQueryError && (
-                  <Badge variant="danger">{liveQueryError}</Badge>
-                )}
-              </div>
+                  {queryErrors.length > 0 && (
+                    <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-sm">
+                      <strong>Validation Issues:</strong>
+                      <ul className="list-disc ml-5 mt-1">
+                        {queryErrors.map((err, i) => (
+                          <li key={i}>{err}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {queryErrors.length === 0 && queryText.trim() && (
+                    <div className="p-2 bg-green-500/10 text-green-500 rounded-lg text-sm">
+                      Query looks valid
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex flex-wrap items-center gap-3">
+                  <Button onClick={executeQuery} disabled={queryLoading} variant="gold">
+                    {liveQueryEnabled ? (
+                      liveQueryConnected ? 'Streaming...' : 'Start Live'
+                    ) : (
+                      queryLoading ? 'Running...' : 'Run Query'
+                    )}
+                    <Play className="h-4 w-4 ml-1" />
+                  </Button>
+                  {liveQueryEnabled && liveQueryConnected && (
+                    <Button variant="danger" onClick={stopLiveQuery}>
+                      <Square className="h-4 w-4 mr-1" />
+                      Stop
+                    </Button>
+                  )}
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={liveQueryEnabled}
+                      onChange={e => {
+                        setLiveQueryEnabled(e.target.checked)
+                        if (!e.target.checked) stopLiveQuery()
+                      }}
+                      className="h-4 w-4 rounded border-border"
+                    />
+                    <span className="font-semibold">Live Mode</span>
+                    <span className="text-xs text-muted-foreground">(streams new results)</span>
+                  </label>
+                  {liveQueryEnabled && (
+                    <Input
+                      className="w-64"
+                      placeholder="API Key (optional)"
+                      value={apiKey}
+                      onChange={e => setApiKey(e.target.value)}
+                    />
+                  )}
+                  {!liveQueryEnabled && queryTime !== null && (
+                    <span className="text-sm text-muted-foreground">Completed in {queryTime}ms</span>
+                  )}
+                  {liveQueryEnabled && liveQueryConnected && (
+                    <Badge variant="success">{liveQueryResults.length} results</Badge>
+                  )}
+                  {liveQueryEnabled && liveQueryError && (
+                    <Badge variant="error">{liveQueryError}</Badge>
+                  )}
+                </div>
+              </CardContent>
             </Card>
 
             {/* Live Results */}
             {liveQueryEnabled && liveQueryResults.length > 0 && (
-              <Card colors={colors} darkMode={darkMode}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
-                  <h3 style={{ margin: 0 }}>
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between">
+                  <CardTitle className="flex items-center gap-2">
                     Live Results
-                    <Badge variant="primary" style={{ marginLeft: '10px' }}>{liveQueryResults.length} rows</Badge>
-                  </h3>
-                  <Button variant="secondary" onClick={() => setLiveQueryResults([])}>Clear</Button>
-                </div>
-                <div style={{ overflowX: 'auto', maxHeight: '400px', overflowY: 'auto' }}>
-                  {liveQueryResults.length > 0 && (
-                    <table style={styles.table}>
-                      <thead style={{ position: 'sticky', top: 0, background: colors.cardBg }}>
-                        <tr>
+                    <Badge variant="gold">{liveQueryResults.length} rows</Badge>
+                  </CardTitle>
+                  <Button variant="secondary" size="sm" onClick={() => setLiveQueryResults([])}>
+                    <Trash2 className="h-4 w-4 mr-1" />
+                    Clear
+                  </Button>
+                </CardHeader>
+                <CardContent>
+                  <ScrollArea className="h-[400px]">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
                           {Object.keys(liveQueryResults[0]).map(key => (
-                            <th key={key} style={styles.th}>{key}</th>
+                            <TableHead key={key}>{key}</TableHead>
                           ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {liveQueryResults.map((row: any, i: number) => (
-                          <tr key={i} style={{ background: i === 0 ? (darkMode ? '#1c4a1c' : '#e8f5e9') : 'transparent' }}>
-                            {Object.values(row).map((val: any, j: number) => (
-                              <td key={j} style={{ ...styles.td, fontFamily: 'monospace', fontSize: '12px' }}>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {liveQueryResults.map((row, i) => (
+                          <TableRow key={i} className={cn(i === 0 && "bg-green-500/10")}>
+                            {Object.values(row).map((val: any, j) => (
+                              <TableCell key={j} className="font-mono text-xs">
                                 {typeof val === 'object' ? JSON.stringify(val) : String(val ?? '')}
-                              </td>
+                              </TableCell>
                             ))}
-                          </tr>
+                          </TableRow>
                         ))}
-                      </tbody>
-                    </table>
-                  )}
-                </div>
+                      </TableBody>
+                    </Table>
+                  </ScrollArea>
+                </CardContent>
               </Card>
             )}
 
             {/* Query Results */}
             {queryResult && !liveQueryEnabled && (
-              <Card colors={colors} darkMode={darkMode}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
-                  <h3 style={{ margin: 0 }}>
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
                     Results
                     {queryResult.success ? (
-                      <Badge variant="success" style={{ marginLeft: '10px' }}>Success</Badge>
+                      <Badge variant="success">Success</Badge>
                     ) : (
-                      <Badge variant="danger" style={{ marginLeft: '10px' }}>Error</Badge>
+                      <Badge variant="error">Error</Badge>
                     )}
-                  </h3>
-                  {queryResult.status && (
-                    <span style={{ color: colors.textMuted }}>Status: {queryResult.status}</span>
+                    {queryResult.status && (
+                      <span className="text-sm text-muted-foreground ml-auto">Status: {queryResult.status}</span>
+                    )}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {queryResult.error && (
+                    <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-lg mb-4">
+                      {queryResult.error}
+                    </div>
                   )}
-                </div>
 
-                {queryResult.error && (
-                  <div style={{ background: darkMode ? '#4a1c1c' : '#f8d7da', color: darkMode ? '#f8d7da' : '#721c24', padding: '15px', borderRadius: '4px', marginBottom: '15px' }}>
-                    {queryResult.error}
-                  </div>
-                )}
-
-                {queryResult.data && (
-                  <>
-                    {Array.isArray(queryResult.data) ? (
-                      <div style={{ overflowX: 'auto' }}>
-                        <div style={{ marginBottom: '10px', color: colors.textMuted }}>
-                          {queryResult.data.length} rows returned
-                        </div>
-                        {queryResult.data.length > 0 && (
-                          <table style={styles.table}>
-                            <thead>
-                              <tr>
-                                {Object.keys(queryResult.data[0]).map(key => (
-                                  <th key={key} style={styles.th}>{key}</th>
-                                ))}
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {queryResult.data.map((row: any, i: number) => (
-                                <tr key={i}>
-                                  {Object.values(row).map((val: any, j: number) => (
-                                    <td key={j} style={{ ...styles.td, fontFamily: 'monospace', fontSize: '12px' }}>
-                                      {typeof val === 'object' ? JSON.stringify(val) : String(val ?? '')}
-                                    </td>
+                  {queryResult.data && (
+                    <>
+                      {Array.isArray(queryResult.data) ? (
+                        <div className="space-y-2">
+                          <div className="text-sm text-muted-foreground">
+                            {queryResult.data.length} rows returned
+                          </div>
+                          {queryResult.data.length > 0 && (
+                            <ScrollArea className="max-h-[500px]">
+                              <Table>
+                                <TableHeader>
+                                  <TableRow>
+                                    {Object.keys(queryResult.data[0]).map(key => (
+                                      <TableHead key={key}>{key}</TableHead>
+                                    ))}
+                                  </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                  {queryResult.data.map((row, i) => (
+                                    <TableRow key={i}>
+                                      {Object.values(row).map((val: any, j) => (
+                                        <TableCell key={j} className="font-mono text-xs">
+                                          {typeof val === 'object' ? JSON.stringify(val) : String(val ?? '')}
+                                        </TableCell>
+                                      ))}
+                                    </TableRow>
                                   ))}
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        )}
-                      </div>
-                    ) : (
-                      <pre style={{ background: colors.statBg, padding: '15px', borderRadius: '4px', overflow: 'auto', fontSize: '13px' }}>
-                        {JSON.stringify(queryResult.data, null, 2)}
-                      </pre>
-                    )}
-                  </>
-                )}
+                                </TableBody>
+                              </Table>
+                            </ScrollArea>
+                          )}
+                        </div>
+                      ) : (
+                        <pre className="p-4 bg-secondary rounded-lg overflow-auto text-xs font-mono">
+                          {JSON.stringify(queryResult.data, null, 2)}
+                        </pre>
+                      )}
+                    </>
+                  )}
+                </CardContent>
               </Card>
             )}
           </div>
 
           {/* Query Helper Sidebar */}
           {showHelper && (
-            <div style={{ flex: '0 0 320px', minWidth: '280px' }}>
-              {/* Schema Explorer */}
-              <Card colors={colors} darkMode={darkMode} title="Schema Explorer">
-                {schemaData?.schema ? (
-                  <div style={{ fontSize: '13px' }}>
-                    {Object.entries(schemaData.schema).map(([table, columns]) => (
-                      <div key={table} style={{ marginBottom: '15px' }}>
-                        <div
-                          role="button"
-                          tabIndex={0}
-                          style={{ fontWeight: 'bold', cursor: 'pointer', padding: '5px', background: colors.statBg, borderRadius: '4px', marginBottom: '5px' }}
-                          onClick={() => setQueryText((prev: string) => prev + (prev ? '\n' : '') + table)}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter' || e.key === ' ') {
-                              e.preventDefault()
-                              setQueryText((prev: string) => prev + (prev ? '\n' : '') + table)
-                            }
-                          }}
-                        >
-                          📋 {table}
-                        </div>
-                        <div style={{ paddingLeft: '10px' }}>
-                          {columns.map(col => (
-                            <div
-                              key={col.name}
-                              role="button"
-                              tabIndex={0}
-                              style={{ padding: '3px 5px', cursor: 'pointer', borderRadius: '3px', display: 'flex', justifyContent: 'space-between' }}
-                              onClick={() => setQueryText((prev: string) => prev + col.name)}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter' || e.key === ' ') {
-                                  e.preventDefault()
-                                  setQueryText((prev: string) => prev + col.name)
-                                }
-                              }}
-                              title={`Click to insert "${col.name}"`}
+            <div className="w-80 space-y-4">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-sm">Schema Explorer</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {schemaData?.schema ? (
+                    <ScrollArea className="h-[300px]">
+                      <div className="space-y-3 text-sm">
+                        {Object.entries(schemaData.schema).map(([table, columns]) => (
+                          <div key={table}>
+                            <button
+                              className="w-full text-left font-bold p-2 bg-secondary rounded hover:bg-muted cursor-pointer"
+                              onClick={() => setQueryText((prev: string) => prev + (prev ? '\n' : '') + table)}
                             >
-                              <span>{col.name}</span>
-                              <span style={{ color: colors.textMuted, fontSize: '11px' }}>{col.type}</span>
+                              {table}
+                            </button>
+                            <div className="pl-2 mt-1 space-y-0.5">
+                              {columns.map(col => (
+                                <button
+                                  key={col.name}
+                                  className="w-full text-left px-2 py-1 rounded hover:bg-secondary flex justify-between text-xs cursor-pointer"
+                                  onClick={() => setQueryText((prev: string) => prev + col.name)}
+                                  title={`Click to insert "${col.name}"`}
+                                >
+                                  <span>{col.name}</span>
+                                  <span className="text-muted-foreground">{col.type}</span>
+                                </button>
+                              ))}
                             </div>
-                          ))}
-                        </div>
+                          </div>
+                        ))}
                       </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p style={{ color: colors.textMuted }}>Loading schema...</p>
-                )}
+                    </ScrollArea>
+                  ) : (
+                    <p className="text-muted-foreground text-sm">Loading schema...</p>
+                  )}
+                </CardContent>
               </Card>
 
-              {/* Query Templates */}
-              <Card colors={colors} darkMode={darkMode} title="Query Templates">
-                {schemaData?.templates ? (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                    {schemaData.templates.map((t, i) => (
-                      <button
-                        key={i}
-                        style={{
-                          padding: '10px',
-                          background: colors.statBg,
-                          border: `1px solid ${colors.border}`,
-                          borderRadius: '4px',
-                          cursor: 'pointer',
-                          textAlign: 'left',
-                          color: colors.text,
-                        }}
-                        onClick={() => {
-                          setQueryText(t.query)
-                          if (t.eventSignature) setEventSignatures(t.eventSignature)
-                        }}
-                        title={t.description}
-                      >
-                        <div style={{ fontWeight: 'bold', marginBottom: '3px' }}>{t.name}</div>
-                        <div style={{ fontSize: '11px', color: colors.textMuted }}>{t.description}</div>
-                      </button>
-                    ))}
-                  </div>
-                ) : (
-                  <p style={{ color: colors.textMuted }}>Loading templates...</p>
-                )}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-sm">Query Templates</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {schemaData?.templates ? (
+                    <div className="space-y-2">
+                      {schemaData.templates.map((t, i) => (
+                        <button
+                          key={i}
+                          className="w-full text-left p-3 bg-secondary hover:bg-muted rounded-lg cursor-pointer"
+                          onClick={() => {
+                            setQueryText(t.query)
+                            if (t.eventSignature) setEventSignatures(t.eventSignature)
+                          }}
+                          title={t.description}
+                        >
+                          <div className="font-semibold text-sm">{t.name}</div>
+                          <div className="text-xs text-muted-foreground">{t.description}</div>
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-muted-foreground text-sm">Loading templates...</p>
+                  )}
+                </CardContent>
               </Card>
 
-              {/* Quick Reference */}
-              <Card colors={colors} darkMode={darkMode} title="Quick Reference">
-                <div style={{ fontSize: '12px', color: colors.textMuted }}>
-                  <div style={{ marginBottom: '10px' }}>
-                    <strong style={{ color: colors.text }}>Hex literals:</strong>
-                    <code style={{ display: 'block', marginTop: '3px', padding: '5px', background: colors.statBg, borderRadius: '3px' }}>
-                      '\x1234...'
-                    </code>
-                  </div>
-                  <div style={{ marginBottom: '10px' }}>
-                    <strong style={{ color: colors.text }}>Array access:</strong>
-                    <code style={{ display: 'block', marginTop: '3px', padding: '5px', background: colors.statBg, borderRadius: '3px' }}>
-                      topics[1], topics[2]
-                    </code>
-                  </div>
-                  <div style={{ marginBottom: '10px' }}>
-                    <strong style={{ color: colors.text }}>Count rows:</strong>
-                    <code style={{ display: 'block', marginTop: '3px', padding: '5px', background: colors.statBg, borderRadius: '3px' }}>
-                      count(1) not count(*)
-                    </code>
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-sm">Quick Reference</CardTitle>
+                </CardHeader>
+                <CardContent className="text-xs space-y-3 text-muted-foreground">
+                  <div>
+                    <strong className="text-foreground">Hex literals:</strong>
+                    <code className="block mt-1 p-2 bg-secondary rounded text-xs">{`'\\x1234...'`}</code>
                   </div>
                   <div>
-                    <strong style={{ color: colors.text }}>Decode logs:</strong>
-                    <code style={{ display: 'block', marginTop: '3px', padding: '5px', background: colors.statBg, borderRadius: '3px' }}>
-                      Add event signature above
-                    </code>
+                    <strong className="text-foreground">Array access:</strong>
+                    <code className="block mt-1 p-2 bg-secondary rounded text-xs">topics[1], topics[2]</code>
                   </div>
-                </div>
+                  <div>
+                    <strong className="text-foreground">Count rows:</strong>
+                    <code className="block mt-1 p-2 bg-secondary rounded text-xs">count(1) not count(*)</code>
+                  </div>
+                </CardContent>
               </Card>
             </div>
           )}
@@ -470,135 +454,106 @@ Approval(address indexed owner, address indexed spender, uint256 value)"
 
       {/* Decoder View */}
       {viewMode === 'decoder' && (
-        <>
-          <Card colors={colors} darkMode={darkMode}>
-            <h3>Event Decoder</h3>
-            <p style={{ color: colors.textMuted, marginBottom: '20px' }}>Decode raw event logs using an ABI signature</p>
+        <div className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Event Decoder</CardTitle>
+              <CardDescription>Decode raw event logs using an ABI signature</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label className="font-semibold">ABI (event signature or JSON)</Label>
+                <Textarea
+                  className="font-mono text-xs h-20"
+                  value={abiInput}
+                  onChange={e => setAbiInput(e.target.value)}
+                  placeholder="event Transfer(address indexed from, address indexed to, uint256 value)"
+                />
+              </div>
 
-            <div style={{ marginBottom: '15px' }}>
-              <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>ABI (event signature or JSON)</label>
-              <textarea
-                name="abiInput"
-                spellCheck={false}
-                value={abiInput}
-                onChange={e => setAbiInput(e.target.value)}
-                placeholder="event Transfer(address indexed from, address indexed to, uint256 value)"
-                style={{
-                  width: '100%',
-                  height: '80px',
-                  fontFamily: 'monospace',
-                  fontSize: '13px',
-                  padding: '10px',
-                  border: `1px solid ${colors.border}`,
-                  borderRadius: '4px',
-                  resize: 'vertical',
-                  background: colors.inputBg,
-                  color: colors.text,
-                }}
-              />
-            </div>
+              <div className="space-y-2">
+                <Label className="font-semibold">Topics (one per line)</Label>
+                <Textarea
+                  className="font-mono text-xs h-24"
+                  value={topicsInput}
+                  onChange={e => setTopicsInput(e.target.value)}
+                  placeholder={`0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef\n0x000000000000000000000000abc...\n0x000000000000000000000000def...`}
+                />
+              </div>
 
-            <div style={{ marginBottom: '15px' }}>
-              <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>Topics (one per line)</label>
-              <textarea
-                name="topicsInput"
-                spellCheck={false}
-                value={topicsInput}
-                onChange={e => setTopicsInput(e.target.value)}
-                placeholder={`0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef
-0x000000000000000000000000abc...
-0x000000000000000000000000def...`}
-                style={{
-                  width: '100%',
-                  height: '100px',
-                  fontFamily: 'monospace',
-                  fontSize: '13px',
-                  padding: '10px',
-                  border: `1px solid ${colors.border}`,
-                  borderRadius: '4px',
-                  resize: 'vertical',
-                  background: colors.inputBg,
-                  color: colors.text,
-                }}
-              />
-            </div>
+              <div className="space-y-2">
+                <Label className="font-semibold">Data (hex)</Label>
+                <Textarea
+                  className="font-mono text-xs h-16"
+                  value={dataInput}
+                  onChange={e => setDataInput(e.target.value)}
+                  placeholder="0x0000000000000000000000000000000000000000000000000de0b6b3a7640000"
+                />
+              </div>
 
-            <div style={{ marginBottom: '15px' }}>
-              <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>Data (hex)</label>
-              <textarea
-                name="dataInput"
-                spellCheck={false}
-                value={dataInput}
-                onChange={e => setDataInput(e.target.value)}
-                placeholder="0x0000000000000000000000000000000000000000000000000de0b6b3a7640000"
-                style={{
-                  width: '100%',
-                  height: '60px',
-                  fontFamily: 'monospace',
-                  fontSize: '13px',
-                  padding: '10px',
-                  border: `1px solid ${colors.border}`,
-                  borderRadius: '4px',
-                  resize: 'vertical',
-                  background: colors.inputBg,
-                  color: colors.text,
-                }}
-              />
-            </div>
-
-            <Button onClick={decodeEvent}>Decode Event</Button>
+              <Button onClick={decodeEvent} variant="gold">
+                <Code className="h-4 w-4 mr-1" />
+                Decode Event
+              </Button>
+            </CardContent>
           </Card>
 
           {decodedResult && (
-            <Card colors={colors} darkMode={darkMode}>
-              <h4>
-                Result
-                {decodedResult.success ? (
-                  <Badge variant="success" style={{ marginLeft: '10px' }}>Decoded</Badge>
-                ) : (
-                  <Badge variant="danger" style={{ marginLeft: '10px' }}>Error</Badge>
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  Result
+                  {decodedResult.success ? (
+                    <Badge variant="success">Decoded</Badge>
+                  ) : (
+                    <Badge variant="error">Error</Badge>
+                  )}
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {decodedResult.error && (
+                  <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-lg">
+                    {decodedResult.error}
+                  </div>
                 )}
-              </h4>
 
-              {decodedResult.error && (
-                <div style={{ background: darkMode ? '#4a1c1c' : '#f8d7da', color: darkMode ? '#f8d7da' : '#721c24', padding: '15px', borderRadius: '4px' }}>
-                  {decodedResult.error}
-                </div>
-              )}
-
-              {decodedResult.success && (
-                <div>
-                  <div style={{ marginBottom: '15px' }}>
-                    <strong>Event:</strong> <code style={{ background: colors.statBg, padding: '2px 6px', borderRadius: '3px' }}>{decodedResult.eventName}</code>
+                {decodedResult.success && (
+                  <div className="space-y-4">
+                    <div>
+                      <span className="font-semibold">Event:</span>{' '}
+                      <code className="bg-secondary px-2 py-1 rounded">{decodedResult.eventName}</code>
+                    </div>
+                    <div>
+                      <span className="font-semibold">Arguments:</span>
+                      <pre className="mt-2 p-4 bg-secondary rounded-lg overflow-auto text-xs font-mono">
+                        {JSON.stringify(decodedResult.args, null, 2)}
+                      </pre>
+                    </div>
                   </div>
-                  <div>
-                    <strong>Arguments:</strong>
-                    <pre style={{ background: colors.statBg, padding: '15px', borderRadius: '4px', overflow: 'auto', fontSize: '13px' }}>
-                      {JSON.stringify(decodedResult.args, null, 2)}
-                    </pre>
-                  </div>
-                </div>
-              )}
+                )}
+              </CardContent>
             </Card>
           )}
 
-          <Card colors={colors} darkMode={darkMode}>
-            <h4>Example: ERC-20 Transfer</h4>
-            <Button
-              variant="secondary"
-              onClick={() => {
-                setAbiInput('event Transfer(address indexed from, address indexed to, uint256 value)')
-                setTopicsInput(`0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef
-0x000000000000000000000000a9d1e08c7793af67e9d92fe308d5697fb81d3e43
-0x00000000000000000000000028c6c06298d514db089934071355e5743bf21d60`)
-                setDataInput('0x00000000000000000000000000000000000000000000000000000000773594d8')
-              }}
-            >
-              Load Example
-            </Button>
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-sm">Example: ERC-20 Transfer</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  setAbiInput('event Transfer(address indexed from, address indexed to, uint256 value)')
+                  setTopicsInput(`0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef\n0x000000000000000000000000a9d1e08c7793af67e9d92fe308d5697fb81d3e43\n0x00000000000000000000000028c6c06298d514db089934071355e5743bf21d60`)
+                  setDataInput('0x00000000000000000000000000000000000000000000000000000000773594d8')
+                }}
+              >
+                Load Example
+              </Button>
+            </CardContent>
           </Card>
-        </>
+        </div>
       )}
-    </>
+    </div>
   )
-}
+})

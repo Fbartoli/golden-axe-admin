@@ -1,5 +1,5 @@
 import { cookies } from 'next/headers'
-import { createHmac } from 'crypto'
+import { createHmac, timingSafeEqual } from 'crypto'
 
 const SESSION_COOKIE = 'admin_session'
 const SESSION_MAX_AGE = 60 * 60 * 24 * 7 // 7 days
@@ -28,7 +28,20 @@ function verify(signed: string): string | null {
 }
 
 export function validatePassword(password: string): boolean {
-  return password === process.env.ADMIN_PASSWORD
+  const expected = process.env.ADMIN_PASSWORD
+  if (!expected) return false
+
+  // Use constant-time comparison to prevent timing attacks
+  const passwordBuffer = Buffer.from(password)
+  const expectedBuffer = Buffer.from(expected)
+
+  // If lengths differ, compare against expected to avoid timing leak
+  if (passwordBuffer.length !== expectedBuffer.length) {
+    timingSafeEqual(expectedBuffer, expectedBuffer)
+    return false
+  }
+
+  return timingSafeEqual(passwordBuffer, expectedBuffer)
 }
 
 export async function createSession(): Promise<void> {

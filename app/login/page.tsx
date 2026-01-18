@@ -2,6 +2,8 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { Lock, Loader2 } from 'lucide-react'
+import { Button, Card, CardContent, CardHeader, CardTitle, Input } from '@/components/ui'
 
 export default function LoginPage() {
   const [password, setPassword] = useState('')
@@ -36,67 +38,59 @@ export default function LoginPage() {
   }
 
   return (
-    <div style={{
-      minHeight: '100vh',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      background: '#f5f5f5',
-    }}>
-      <div style={{
-        background: 'white',
-        padding: '40px',
-        borderRadius: '8px',
-        boxShadow: '0 2px 10px rgba(0,0,0,0.1)',
-        width: '100%',
-        maxWidth: '400px',
-      }}>
-        <h1 style={{ margin: '0 0 24px', fontSize: '24px', textAlign: 'center' }}>
-          Golden Axe Admin
-        </h1>
+    <div className="min-h-screen flex items-center justify-center bg-background p-4">
+      <Card className="w-full max-w-md">
+        <CardHeader className="text-center">
+          <div className="mx-auto mb-4 w-12 h-12 rounded-full bg-gold/20 flex items-center justify-center">
+            <Lock className="h-6 w-6 text-gold" />
+          </div>
+          <CardTitle className="text-2xl">
+            <span className="text-gold">Horusblock</span> Admin
+          </CardTitle>
+        </CardHeader>
 
-        <form onSubmit={handleSubmit}>
-          <input
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder="Enter admin password"
-            autoFocus
-            style={{
-              width: '100%',
-              padding: '12px',
-              fontSize: '16px',
-              border: '1px solid #ddd',
-              borderRadius: '4px',
-              boxSizing: 'border-box',
-            }}
-          />
+        <CardContent>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="space-y-2">
+              <label htmlFor="password" className="sr-only">Admin Password</label>
+              <Input
+                id="password"
+                name="password"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Enter admin password…"
+                autoComplete="current-password"
+                autoFocus
+                className="h-12"
+                aria-describedby={error ? "password-error" : undefined}
+              />
+            </div>
 
-          {error && (
-            <p style={{ color: 'red', margin: '12px 0 0', fontSize: '14px' }}>
-              {error}
-            </p>
-          )}
+            {error && (
+              <p id="password-error" role="alert" aria-live="polite" className="text-red-500 text-sm">{error}</p>
+            )}
 
-          <button
-            type="submit"
-            disabled={loading || !password}
-            style={{
-              width: '100%',
-              padding: '12px',
-              marginTop: '16px',
-              fontSize: '16px',
-              background: loading ? '#ccc' : '#0070f3',
-              color: 'white',
-              border: 'none',
-              borderRadius: '4px',
-              cursor: loading ? 'not-allowed' : 'pointer',
-            }}
-          >
-            {loading ? 'Signing in...' : 'Sign In'}
-          </button>
-        </form>
-      </div>
+            <Button
+              type="submit"
+              disabled={loading || !password}
+              className="w-full h-12"
+              variant="gold"
+            >
+              {loading ? (
+                <>
+                  <span className="animate-spin" aria-hidden="true">
+                    <Loader2 className="h-4 w-4 mr-2" />
+                  </span>
+                  <span>Signing in…</span>
+                </>
+              ) : (
+                'Sign In'
+              )}
+            </Button>
+          </form>
+        </CardContent>
+      </Card>
     </div>
   )
 }

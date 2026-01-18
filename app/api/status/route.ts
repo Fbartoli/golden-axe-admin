@@ -1,66 +1,45 @@
-import { beSql } from '@/lib/db'
+import { getHealthDetailed } from '@/lib/backend-api'
 import { NextResponse } from 'next/server'
 
 export async function GET() {
-  // Get config from be database (config table moved to backend)
-  const config = await beSql`
-    SELECT chain, name, url, enabled, batch_size, concurrency, start_block
-    FROM config
-    WHERE enabled = true
-    ORDER BY chain
-  `
-
-  // Get sync status from be database - latest block per chain
-  let syncData: any[] = []
   try {
-    syncData = await beSql`
-      SELECT
-        chain,
-        max(num) as latest_synced_block,
-        count(*) as total_blocks
-      FROM blocks
-      GROUP BY chain
-      ORDER BY chain
-    `
-  } catch (e) {
-    // Table might not exist yet
-  }
+    const health = await getHealthDetailed()
 
-  // Get latest logs per chain
-  let logsData: any[] = []
-  try {
-    logsData = await beSql`
-      SELECT
-        chain,
-        max(block_num) as latest_log_block,
-        count(*) as total_logs
-      FROM logs
-      GROUP BY chain
-      ORDER BY chain
-    `
-  } catch (e) {
-    // Table might not exist yet
-  }
+    // Transform backend response to match expected format
+    const config = health.checks.sync.chains.map(chain => ({
+      chain: parseInt(chain.chain_id, 10),
+      name: chain.chain_name,
+      enabled: chain.status !== 'disabled',
+    }))
 
-  // Combine the data
-  const chainStatus: Record<number, any> = {}
-  for (const row of syncData) {
-    chainStatus[row.chain] = {
-      latest_synced_block: Number(row.latest_synced_block),
-      total_blocks: Number(row.total_blocks),
+    // Build chainStatus keyed by chain ID
+    const chainStatus: Record<number, any> = {}
+    for (const chain of health.checks.sync.chains) {
+      const chainId = parseInt(chain.chain_id, 10)
+      chainStatus[chainId] = {
+        latest_synced_block: parseInt(chain.synced_block, 10) || 0,
+        head_block: parseInt(chain.head_block, 10) || 0,
+        blocks_behind: chain.blocks_behind,
+        sync_percentage: chain.sync_percentage,
+        status: chain.status,
+      }
     }
-  }
-  for (const row of logsData) {
-    if (!chainStatus[row.chain]) {
-      chainStatus[row.chain] = {}
-    }
-    chainStatus[row.chain].latest_log_block = Number(row.latest_log_block)
-    chainStatus[row.chain].total_logs = Number(row.total_logs)
-  }
 
-  return NextResponse.json({
-    config,
-    chainStatus,
-    dbConnected: syncData.length > 0 || logsData.length > 0,
-  })
+    return NextResponse.json({
+      config,
+      chainStatus,
+      dbConnected: health.checks.database.status === 'ok',
+      backendStatus: health.status,
+      backendVersion: health.version,
+      uptimeSeconds: health.uptime_seconds,
+    })
+  } catch (e: any) {
+    console.error('Error fetching status from backend:', e)
+    return NextResponse.json({
+      config: [],
+      chainStatus: {},
+      dbConnected: false,
+      error: e.message,
+    }, { status: 503 })
+  }
 }
